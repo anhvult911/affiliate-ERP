@@ -99,12 +99,12 @@ let migration = migrationFiles.map((file) => readFileSync(file, "utf8")).join("\
 
 // pgvector is not bundled here; drop exactly what needs it and report it.
 migration = migration
-  .replace(/create extension if not exists "vector"[^\n]*\n/, "")
-  .replace(/\n\s*embedding extensions\.vector\(768\),/, "\n")
-  .replace(/create index products_embedding_hnsw_idx[\s\S]*?;\n/, "")
-  .replace(/create or replace function public\.match_products\([\s\S]*?\n\$\$;\n/, "")
-  .replace(/revoke all on function public\.match_products[^\n]*\n/, "")
-  .replace(/grant execute on function public\.match_products[^\n]*\n/, "");
+  .replace(/create extension if not exists "vector"[^\n]*\r?\n/, "")
+  .replace(/\r?\n\s*embedding extensions\.vector\(768\),/, "\n")
+  .replace(/create index products_embedding_hnsw_idx[\s\S]*?;\r?\n/, "")
+  .replace(/create or replace function public\.match_products\([\s\S]*?\r?\n\$\$;\r?\n/, "")
+  .replace(/revoke all on function public\.match_products[^\n]*\r?\n/, "")
+  .replace(/grant execute on function public\.match_products[^\n]*\r?\n/, "");
 skipped.push(
   "pgvector statements (create extension vector, products.embedding, products_embedding_hnsw_idx, match_products) — verify on a pgvector/pgvector:pg16 container"
 );
