@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hồ sơ (fixture)</title>
+    <style>
+      :root { color-scheme: light; }
+      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f0f2f5; color: #1c1e21; }
+      .card { max-width: 720px; margin: 24px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+      .cover { position: relative; height: 200px; background: #ccd0d5; }
+      .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .cover input { position: absolute; top: 8px; right: 8px; background: #fff; padding: 4px; border-radius: 6px; font-size: 12px; }
+      .body { padding: 16px; }
+      .avatar-row { display: flex; align-items: flex-end; gap: 16px; margin-top: -56px; }
+      .avatar { width: 112px; height: 112px; border-radius: 50%; border: 4px solid #fff; background: #e4e6eb; overflow: hidden; }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .avatar input { margin-top: 8px; font-size: 12px; }
+      h1 { font-size: 20px; margin: 12px 0 4px; }
+      #bio-text { color: #65676b; margin: 0 0 12px; white-space: pre-wrap; }
+      .editor { display: flex; gap: 8px; align-items: center; border-top: 1px solid #e4e6eb; padding-top: 12px; }
+      .editor input { flex: 1; padding: 8px; border: 1px solid #ccd0d5; border-radius: 6px; font: inherit; }
+      .editor button { padding: 8px 14px; border: 0; border-radius: 6px; background: #1877f2; color: #fff; font-weight: 600; cursor: pointer; }
+      .muted { color: #65676b; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="cover">
+        <img id="cover-img" alt="" />
+        <input id="cover-input" type="file" accept="image/*" aria-label="Ảnh bìa" />
+      </div>
+
+      <div class="body">
+        <div class="avatar-row">
+          <div>
+            <div class="avatar"><img id="avatar-img" alt="" /></div>
+            <input id="avatar-input" type="file" accept="image/*" aria-label="Ảnh đại diện" />
+          </div>
+          <div>
+            <h1 id="profile-name">Hồ sơ</h1>
+            <p class="muted" id="profile-handle"></p>
+          </div>
+        </div>
+
+        <p id="bio-text"></p>
+
+        <div class="editor">
+          <input id="bio-input" type="text" maxlength="101" placeholder="Thêm tiểu sử" />
+          <button id="bio-save" type="button">Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const as = params.get("as") || "fixture";
+      document.getElementById("profile-name").textContent = as;
+      document.getElementById("profile-handle").textContent = "@" + as.toLowerCase().replace(/\s+/g, ".");
+
+      function apply(state) {
+        const avatar = document.getElementById("avatar-img");
+        const cover = document.getElementById("cover-img");
+        if (state.avatar) avatar.src = state.avatar;
+        else avatar.removeAttribute("src");
+        if (state.cover) cover.src = state.cover;
+        else cover.removeAttribute("src");
+
+        const bio = document.getElementById("bio-text");
+        bio.textContent = state.bio || "";
+        document.getElementById("bio-input").value = state.bio || "";
+      }
+
+      async function refresh() {
+        const response = await fetch("/profile/state");
+        apply(await response.json());
+      }
+
+      async function upload(fileInput, kind) {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+
+        await fetch("/profile/asset", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind, dataUrl })
+        });
+
+        await refresh();
+      }
+
+      document.getElementById("avatar-input").addEventListener("change", (event) => upload(event.target, "avatar"));
+      document.getElementById("cover-input").addEventListener("change", (event) => upload(event.target, "cover"));
+
+      document.getElementById("bio-save").addEventListener("click", async () => {
+        await fetch("/profile/bio", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ bio: document.getElementById("bio-input").value })
+        });
+        await refresh();
+      });
+
+      refresh();
+    </script>
+  </body>
+</html>

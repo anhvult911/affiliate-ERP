@@ -1,0 +1,18 @@
+# pnpm settings live here (the package.json "pnpm" field is no longer read).
+# The Next.js app is the root package; `workers/` is the automation process that
+# drives the antidetect browser and talks to /api/worker/*.
+packages:
+  - workers
+
+# Build scripts are opt-in and must be ruled on — `strictDepBuilds` fails the
+# install when a dependency has an unreviewed lifecycle script:
+#   - unrs-resolver: napi postinstall wires the platform-specific binary that
+#     eslint's import resolver loads at lint time. Approved.
+#   - @google/genai / protobufjs: their scripts (`prepare`, `build`) exist for
+#     repository maintenance; both ship a complete dist, so they stay denied.
+allowBuilds:
+  unrs-resolver: true
+  # tsx runs on esbuild; its postinstall links the platform binary.
+  esbuild: true
+  "@google/genai": false
+  protobufjs: false

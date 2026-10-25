@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 16px; background: #f0f2f5; }
+      .panel { background: #fff; border-radius: 8px; padding: 16px; max-width: 680px; margin: 0 auto; }
+      .panel + .panel { margin-top: 12px; }
+      h1 { font-size: 16px; margin: 0 0 8px; }
+      .composer { border: 1px solid #ccd0d5; border-radius: 8px; padding: 8px; margin-top: 12px; }
+      [contenteditable] { min-height: 44px; padding: 8px; outline: none; }
+      [contenteditable]:focus { background: #f7f8fa; }
+      button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: #1877f2; color: #fff; cursor: pointer; }
+      button.secondary { background: #e4e6eb; color: #050505; }
+      .post, .comment { border-top: 1px solid #e4e6eb; padding: 10px 0; }
+      .author { font-weight: 600; }
+      .reply { margin-left: 24px; border-left: 2px solid #e4e6eb; padding-left: 10px; margin-top: 6px; }
+      .meta { color: #65676b; font-size: 12px; }
+      .reply-composer { margin-top: 8px; display: none; }
+      .reply-composer.open { display: block; }
+      .wall { text-align: center; padding: 24px; }
+      a { color: #1877f2; }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const author = params.get("as") || "anonymous";
+      const postId = location.pathname.startsWith("/post/") ? location.pathname.split("/")[2] : null;
+      // Polling pauses while a composer is open: a real page never wipes the box
+      // you are typing in.
+      let openReplyFor = null;
+
+      if (params.get("checkpoint") === "1") {
+        document.getElementById("app").innerHTML =
+          '<div class="panel wall"><h2>Chúng tôi đã phát hiện hoạt động bất thường</h2>' +
+          "<p>Vui lòng xác minh danh tính để tiếp tục sử dụng tài khoản.</p></div>";
+      } else if (postId) {
+        renderPostView(postId);
+      } else {
+        renderTimelineView();
+      }
+
+      /* ---------------------------------------------------------- timeline */
+      function renderTimelineView() {
+        document.getElementById("app").innerHTML = `
+          <div class="panel">
+            <h1>Trang cá nhân</h1>
+            <p class="meta">đang xem với tư cách: ${escapeHtml(author)}</p>
+            <div class="composer">
+              <div id="post-box" role="textbox" contenteditable="true" aria-label="Bạn đang nghĩ gì?"></div>
+              <div style="margin-top: 8px"><button id="post-submit">Đăng</button></div>
+            </div>
+            <div id="posts"></div>
+          </div>`;
+
+        const box = document.getElementById("post-box");
+        document.getElementById("post-submit").addEventListener("click", () => submitPost(box));
+        box.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" || event.shiftKey) return;
+          event.preventDefault();
+          submitPost(box);
+        });
+
+        const refreshPosts = async () => {
+          const state = await (await fetch("/state")).json();
+          document.getElementById("posts").innerHTML = state.posts
+            .map(
+              (post) => `
+              <div class="post" data-post-id="${post.id}">
+                <div><span class="author">${escapeHtml(post.author)}</span>
+                  <span class="meta">${new Date(post.at).toLocaleTimeString()} · ${post.commentCount} bình luận</span></div>
+                <div class="text">${escapeHtml(post.text)}</div>
+                <a href="/post/${post.id}">Xem bài viết</a>
+              </div>`
+            )
+            .join("");
+        };
+
+        refreshPosts();
+        setInterval(refreshPosts, 800);
+
+        async function submitPost(element) {
+          const text = element.innerText.trim();
+          if (!text) return;
+          element.innerText = "";
+          await fetch("/post", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ author, text })
+          });
+          await refreshPosts();
+        }
+      }
+
+      /* -------------------------------------------------------------- post */
+      function renderPostView(id) {
+        document.getElementById("app").innerHTML = `
+          <div class="panel">
+            <h1 id="post-heading">Bài viết</h1>
+            <p id="post-body"></p>
+            <p class="meta">đang xem với tư cách: ${escapeHtml(author)}</p>
+            <div class="composer">
+              <div id="comment-box" role="textbox" contenteditable="true" aria-label="Viết bình luận…"></div>
+              <input id="comment-file" type="file" accept="image/*" hidden />
+              <div style="display: flex; gap: 8px; margin-top: 8px">
+                <button id="comment-submit">Đăng</button>
+                <span class="meta" id="attach-note"></span>
+              </div>
+            </div>
+            <div id="comments"></div>
+          </div>`;
+
+        const box = document.getElementById("comment-box");
+        const file = document.getElementById("comment-file");
+
+        file.addEventListener("change", () => {
+          document.getElementById("attach-note").textContent = file.files[0] ? file.files[0].name : "";
+        });
+        document.getElementById("comment-submit").addEventListener("click", () => submitComment(box));
+        box.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" || event.shiftKey) return;
+          event.preventDefault();
+          submitComment(box);
+        });
+        document.addEventListener("click", (event) => {
+          const trigger = event.target.closest(".reply-open");
+          if (trigger) openReplyBox(trigger.dataset.parent);
+        });
+
+        async function submitComment(element, parentId) {
+          const text = element.innerText.trim();
+          if (!text) return;
+          element.innerText = "";
+          await fetch("/comment", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ author, text, postId: id, parentId, attachment: file.files[0] ? file.files[0].name : null })
+          });
+          await refreshComments();
+        }
+
+        async function refreshComments() {
+          if (openReplyFor) return;
+          const state = await (await fetch(`/state?post=${id}`)).json();
+          if (state.post) {
+            document.getElementById("post-heading").textContent = state.post.author;
+            document.getElementById("post-body").textContent = state.post.text;
+          }
+          document.getElementById("comments").innerHTML = state.comments
+            .map(
+              (comment) => `
+              <div class="comment" data-comment-id="${comment.id}">
+                <div><span class="author">${escapeHtml(comment.author)}</span>
+                  <span class="meta">${new Date(comment.at).toLocaleTimeString()}</span></div>
+                <div class="text">${escapeHtml(comment.text)}</div>
+                ${comment.attachment ? `<div class="meta">đã đính kèm: ${escapeHtml(comment.attachment)}</div>` : ""}
+                <button class="secondary reply-open" data-parent="${comment.id}">Phản hồi</button>
+                ${comment.replies
+                  .map(
+                    (reply) => `<div class="reply"><span class="author">${escapeHtml(reply.author)}</span>
+                      <div class="text">${escapeHtml(reply.text)}</div></div>`
+                  )
+                  .join("")}
+              </div>`
+            )
+            .join("");
+        }
+
+        async function openReplyBox(parentId) {
+          const host = document.querySelector(`[data-comment-id="${parentId}"]`);
+          if (!host) return;
+          openReplyFor = parentId;
+
+          if (host.querySelector("#reply-box")) {
+            host.querySelector("#reply-box").focus();
+            return;
+          }
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "reply-composer open";
+          wrapper.innerHTML =
+            '<div id="reply-box" role="textbox" contenteditable="true" aria-label="Viết trả lời…"></div>' +
+            '<button id="reply-submit" style="margin-top: 6px">Phản hồi</button>';
+          host.appendChild(wrapper);
+
+          const replyBox = wrapper.querySelector("#reply-box");
+          wrapper.querySelector("#reply-submit").addEventListener("click", async () => {
+            const text = replyBox.innerText.trim();
+            if (!text) return;
+            openReplyFor = null;
+            wrapper.remove();
+            await submitComment(replyBox, parentId);
+          });
+          replyBox.addEventListener("keydown", async (event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            wrapper.querySelector("#reply-submit").click();
+          });
+          replyBox.focus();
+        }
+
+        refreshComments();
+        setInterval(refreshComments, 800);
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]
+        );
+      }
+    </script>
+  </body>
+</html>

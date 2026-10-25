@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+**/node_modules
+**/.next
+workers/.profiles
+workers/.evidence
+workers/evidence
+workers/assets
+**/.env
+**/.env.local
+*.log
+tests
