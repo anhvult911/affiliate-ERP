@@ -379,7 +379,7 @@ before launching, because a dead proxy makes Chromium fall back to the host IP.
 ## Verifying the schema without a database server
 
 ```bash
-pnpm verify:schema     # 26 assertions, ~3s, no Docker, no network
+pnpm verify:schema     # 46 assertions, ~3s, no Docker, no network
 ```
 
 Runs `supabase/migrations/*` and `supabase/seed.sql` against a real Postgres

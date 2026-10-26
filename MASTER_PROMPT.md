@@ -22,8 +22,8 @@
 |---|---|
 | Frontend / Dashboard | Next.js 14+ (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide React (icons) |
 | Backend / Database | Supabase (PostgreSQL, Row Level Security, Realtime Subscriptions, pgvector for semantic product matching) |
-| Automation workers | Python (FastAPI + Playwright) **or** Node.js (BullMQ), interfacing with Antidetect Browser APIs (GPM-Login / Genlogin) for browser automation |
-| AI integration | Google Gemini API (`gemini-1.5-flash`) for multimodal post analysis, image understanding, copywriting |
+| Automation workers | **Node.js + Playwright** (`workers/`), talking to the app through the bearer-token API in `src/app/api/worker/*`. Antidetect profiles are optional: the default provider is the operator's own Chrome with one persistent profile per account; GPM-Login/Genlogin adapters exist for fingerprint masking. The claim RPC is the queue — no BullMQ. |
+| AI integration | Google Gemini via `@google/genai`: `gemini-3.1-flash-lite` by default (with a fallback chain) for post analysis and copywriting, `gemini-embedding-001` at 768 dims for product matching. Model ids and the fallback list live in `src/lib/ai/gemini.ts`. |
 | Deployment | Vercel (frontend), self-hosted VPS (Docker for workers & Supabase local/cloud) |
 
 ---
@@ -142,7 +142,7 @@ Documented from the enum comments above — these are the contracts workers and 
 ### 5.1 Radar & AI Matching
 
 1. Worker scrapes posts from `target_sources` (respecting `scan_interval_mins`, `is_active`).
-2. Sends post text **and** images to `gemini-1.5-flash` together with the product catalog context.
+2. Sends post text **and** images to the configured Gemini model (default `gemini-3.1-flash-lite`, see `src/lib/ai/gemini.ts`) together with the product catalog context.
 3. Scores matching probability; only matches **≥ 80%** proceed.
 4. Inserts into `comment_tasks` with `status = 'pending_approval'`.
 5. Triggers realtime update on the web dashboard **and** the Telegram bot.
@@ -184,7 +184,7 @@ has the reasoning):
 | # | Gap | Status |
 |---|---|---|
 | 1 | `products.embedding vector(1536)` conflicts with a Gemini-only stack | **Resolved** — `vector(768)` for `gemini-embedding-001` (`outputDimensionality: 768`; `text-embedding-004` is retired for new keys); the radar embeds a post, retrieves candidates with `match_products()` (pgvector), then Gemini re-ranks. |
-| 2 | Telegram bot referenced by §5.1/§5.3 but absent from the stack | **Resolved** — `/api/telegram/webhook` (secret-token auth, constant-time compare) with `/queue`, `/status`, inline `approve:`/`reject:` callbacks, plus capture and silent-worker alerts. Verified end to end against a real bot. |
+| 2 | Telegram bot referenced by §5.1/§5.3 but absent from the stack | **Resolved** — `/api/telegram/webhook` (secret-token auth, constant-time compare) with `/queue`, `/status`, inline `approve:`/`reject:` callbacks, plus capture and silent-worker alerts. Verification level differs by part: message text, keyboards and callback answers were asserted against a local Bot API stub (`TELEGRAM_API_BASE`), while the webhook, the database effects (task moved to `queued`, `sub_id_code` minted) and the alerts were exercised for real. Not yet verified against a production bot on the final domain. |
 | 3 | Worker runtime: FastAPI+Playwright vs Node+BullMQ | **Resolved** — Node + Playwright in `workers/`; the bearer-token API in `src/app/api/worker/*` stays runtime-agnostic. BullMQ was not needed: the claim RPC (`FOR UPDATE SKIP LOCKED`) is the queue. |
 | 4 | Antidetect provider: GPM-Login vs Genlogin | **Resolved** — `ANTIDETECT_PROVIDER=local` is the default: the operator's own Chrome with one persistent profile per account (verified: real login, TOTP, session persistence, profile lock). Both vendor adapters remain for when several personas must run from one machine, which is the only thing an antidetect tool adds. |
 | 5 | `seeding_2_accounts` needs two accounts, schema had one | **Resolved** — `secondary_account_id` + a check constraint for seeding mode. |
