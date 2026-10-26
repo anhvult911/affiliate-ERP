@@ -93,7 +93,6 @@ export async function POST(request: Request) {
   const patch: {
     last_action_at: string;
     last_warmed_at?: string;
-    trust_score?: number;
     status?: "cooldown" | "checkpoint";
     cooldown_until?: string | null;
     bio?: string;
@@ -101,6 +100,8 @@ export async function POST(request: Request) {
     cover_set_at?: string;
     profile_built_at?: string;
   } = { last_action_at: now };
+
+  let trustScore = account.trust_score ?? 0;
 
   // Profile state is what a visitor sees, so it is recorded on the account rather
   // than only in the run log — and it is recorded per asset, because a run that
@@ -121,11 +122,6 @@ export async function POST(request: Request) {
 
   if (input.status === "completed") {
     patch.last_warmed_at = now;
-    // Same rule as a published comment: a successful action earns trust, unless
-    // the same report flagged the account for checkpoint.
-    if (input.accountStatus !== "checkpoint") {
-      patch.trust_score = Math.min(100, (account.trust_score ?? 0) + 1);
-    }
   }
 
   if (input.accountStatus) {
@@ -139,9 +135,16 @@ export async function POST(request: Request) {
   const { error: patchError } = await supabase.from("social_accounts").update(patch).eq("id", input.accountId);
   if (patchError) return workerJson({ ok: false, error: patchError.message }, 500);
 
-  return workerJson({
-    ok: true,
-    runId: run.id,
-    trustScore: patch.trust_score ?? account.trust_score
-  });
+  // Same rule as a published comment: a successful action earns trust, unless the same
+  // report flagged the account for checkpoint. Done in one statement so two reports
+  // landing together cannot overwrite each other's increment.
+  if (input.status === "completed" && input.accountStatus !== "checkpoint") {
+    const { data: bumped, error: bumpError } = await supabase
+      .rpc("bump_trust_score", { p_account_id: input.accountId, p_delta: 1 });
+
+    if (bumpError) return workerJson({ ok: false, error: bumpError.message }, 500);
+    if (typeof bumped === "number") trustScore = bumped;
+  }
+
+  return workerJson({ ok: true, runId: run.id, trustScore });
 }

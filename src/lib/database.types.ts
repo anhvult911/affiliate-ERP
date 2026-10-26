@@ -357,6 +357,9 @@ isOneToOne: false
               "account_name": string,"commission": number,"commission_rate": number,"created_at": string,"executed_at": string,"execution_mode": Database["public"]['Enums']["execution_mode"],"orders": number,"post_url": string,"product_name": string,"revenue": number,"settled_commission": number,"source_name": string,"source_type": Database["public"]['Enums']["source_type"],"status": Database["public"]['Enums']["task_status"],"sub_id_code": string,"task_id": string
             }[]
                            },
+"bump_trust_score":
+{ Args: { "p_account_id": string,"p_delta"?: number }; Returns: number
+                           },
 "claim_comment_tasks":
 { Args: { "p_limit"?: number,"p_worker": string }; Returns: {
               "ai_draft_comment": string | null,
