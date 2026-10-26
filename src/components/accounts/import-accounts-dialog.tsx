@@ -20,8 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { importAccounts, type ImportAccountsResult } from "@/lib/actions/accounts";
 
-const PLACEHOLDER = `61590750336672|matkhau|GDS7FIVALRCIHH7Y7Y62FNOOUVLT37B5|103.166.184.92:16008:user:pass
-61590750336673|matkhau2|MFRGGZDFMZTWQ2LKNNWG23TP|103.166.184.93:16008`;
+const PLACEHOLDER = `00000000000000|matkhau|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|127.0.0.1:8080
+00000000000001|matkhau2|BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB|127.0.0.1:8081`;
 
 /**
  * Bulk import from the operator's Facebook export.

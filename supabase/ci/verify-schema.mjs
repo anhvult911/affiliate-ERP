@@ -427,13 +427,13 @@ eq(
 );
 
 await exec(`insert into public.social_accounts (name, persona_type, login_identifier, proxy_port)
-            values ('Cred A', 'me_bim', '61590750336672', 16008)`);
+            values ('Cred A', 'me_bim', '00000000000001', 16008)`);
 record("credential import accepts a valid row", true);
 
 let duplicateRejected = false;
 try {
   await exec(`insert into public.social_accounts (name, persona_type, login_identifier)
-              values ('Cred A again', 'me_bim', '61590750336672')`);
+              values ('Cred A again', 'me_bim', '00000000000001')`);
 } catch (error) {
   duplicateRejected = /social_accounts_login_identifier_key/.test(String(error.message));
 }

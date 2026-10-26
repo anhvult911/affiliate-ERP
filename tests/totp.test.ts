@@ -7,7 +7,7 @@ import { decodeBase32, generateTotp, TOTP_PERIOD_SECONDS } from "@/lib/accounts/
  * RFC 6238 Appendix B vectors. The secret is the ASCII string
  * "12345678901234567890", encoded as base32.
  */
-const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"; // secret-scan:allow (RFC 6238 test vector)
 
 test("matches the RFC 6238 vectors (6-digit truncation)", () => {
   // The document lists 8-digit values; this implementation is 6-digit, so the
