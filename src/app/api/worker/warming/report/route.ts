@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { resolveExecutedAt } from "@/lib/worker/report-time";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,8 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   const supabase = createSupabaseAdminClient();
-  const now = input.executedAt ?? new Date().toISOString();
+  // Server-authoritative (P2-7): the worker's clock is only trusted within tolerance.
+  const now = resolveExecutedAt(input.executedAt);
 
   const { data: account, error: accountError } = await supabase
     .from("social_accounts")

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyTaskFailure } from "@/lib/telegram/notify";
+import { resolveExecutedAt } from "@/lib/worker/report-time";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +73,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     .from("comment_tasks")
     .update({
       status,
-      executed_at: parsed.data.executedAt ?? new Date().toISOString(),
+      // The server owns the timestamp (P2-7); a client value only wins inside the
+      // tolerance, so a skewed worker clock cannot backdate the row.
+      executed_at: resolveExecutedAt(parsed.data.executedAt),
       last_error: status === "failed" ? (parsed.data.error ?? "Worker reported failure") : null,
       execution_note: parsed.data.note ?? null
     })

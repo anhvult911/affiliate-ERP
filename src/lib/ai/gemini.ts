@@ -58,14 +58,39 @@ export type DraftResult = {
   followUp: string | null;
 };
 
+/**
+ * Models Google has retired for keys issued after a cutoff. They still appear in the
+ * /models listing, so the failure only shows up as a 404 on the first request — by
+ * which time a radar capture has already been lost. Refusing them at read time turns a
+ * silent degradation into one clear message (docs/REVIEW.md P2-2).
+ */
+const RETIRED_MODELS = new Map<string, string>([
+  ["gemini-2.5-flash", "retired for new API keys — use a current model such as gemini-3.1-flash-lite"],
+  ["gemini-2.5-pro", "retired for new API keys — use a current model"],
+  ["text-embedding-004", "retired — use gemini-embedding-001 with outputDimensionality 768"]
+]);
+
+function assertNotRetired(model: string, variable: string): string {
+  const note = RETIRED_MODELS.get(model);
+  if (!note) return model;
+
+  throw new Error(
+    `${variable}="${model}" is ${note}. ` +
+      `Unset it to use the default (${variable === "GEMINI_MODEL" ? DEFAULT_GEMINI_MODEL : DEFAULT_EMBEDDING_MODEL}).`
+  );
+}
+
 /** Generation model for matching and drafting, resolved at call time. */
 export function readGeminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+  return assertNotRetired(process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL, "GEMINI_MODEL");
 }
 
 /** Embedding model, resolved at call time. Must emit 768-dim vectors. */
 export function readEmbeddingModel(): string {
-  return process.env.GEMINI_EMBEDDING_MODEL?.trim() || DEFAULT_EMBEDDING_MODEL;
+  return assertNotRetired(
+    process.env.GEMINI_EMBEDDING_MODEL?.trim() || DEFAULT_EMBEDDING_MODEL,
+    "GEMINI_EMBEDDING_MODEL"
+  );
 }
 
 export function isGeminiConfigured(): boolean {

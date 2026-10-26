@@ -111,11 +111,22 @@ export async function runRadarCycle(deps: RadarDeps): Promise<RadarCycleResult> 
 
       // Even an empty or fully-duplicated scan advances the interval, otherwise
       // this source would hold the head of the due list forever.
-      await deps.api.radarScanned(source.id, posts.length).catch((error: unknown) => {
-        log.warn("radar: could not record the scan", {
-          error: error instanceof Error ? error.message : String(error)
+      const recorded = await deps.api
+        .radarScanned(source.id, posts.length, account.id)
+        .catch((error: unknown) => {
+          log.warn("radar: could not record the scan", {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          return null;
         });
-      });
+
+      // The app alerts when the streak crosses its threshold; mirror it in the log so
+      // a local run shows the same signal.
+      if (recorded?.alerted) {
+        log.error("radar: consecutive empty scans — selectors may have broken", {
+          emptyStreak: recorded.emptyStreak
+        });
+      }
 
       log.info("radar: source scanned", { posts: posts.length });
     } catch (error) {

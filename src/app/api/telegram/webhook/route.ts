@@ -8,8 +8,10 @@ import {
   answerCallbackQuery,
   editMessageText,
   sendMessage,
+  telegramChatId,
   webhookSecret
 } from "@/lib/telegram/api";
+import { isAllowedChat, readUpdateChatId } from "@/lib/telegram/allowlist";
 import { buildQueueMessage, buildStatusMessage } from "@/lib/telegram/messages";
 import { loadPendingCaptures, loadStatusView } from "@/lib/telegram/queries";
 
@@ -68,6 +70,13 @@ export async function POST(request: Request) {
 
   const update = (await request.json().catch(() => null)) as TelegramUpdate | null;
   if (!update) return NextResponse.json({ ok: false, error: "Invalid update body." }, { status: 400 });
+
+  const chatId = readUpdateChatId(update);
+  if (!isAllowedChat(chatId, telegramChatId())) {
+    // Acknowledge so Telegram stops retrying, but do nothing on behalf of a stranger.
+    console.warn("[telegram] ignored an update from an unknown chat", { chatId });
+    return NextResponse.json({ ok: true, ignored: true });
+  }
 
   try {
     if (update.callback_query) {
