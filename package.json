@@ -22,7 +22,8 @@
     "db:start": "supabase start",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > src/lib/database.types.ts"
+    "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
+    "import:targets": "tsx scripts/import-targets.ts"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
