@@ -334,9 +334,42 @@ if (rolesAvailable) {
   record("anon cannot execute the analytics RPCs", !(await canExecute("anon", "public.analytics_summary(timestamptz)")));
   record("authenticated can execute the analytics RPCs", await canExecute("authenticated", "public.analytics_summary(timestamptz)"));
   record("authenticated keeps is_operator()", await canExecute("authenticated", "public.is_operator()"));
+  record("anon cannot execute bump_trust_score",
+    !(await canExecute("anon", "public.bump_trust_score(uuid,int)")));
 } else {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
+
+/* ------------------------------------- atomic trust increments (P2-6) */
+await exec(`update public.social_accounts set trust_score = 10 where id = '${ACCOUNT}'`);
+
+// Separate statements on purpose: inside one statement both calls see the same
+// snapshot for the stored value, which is the very effect being fixed.
+eq("the first bump adds one", await scalar(`select public.bump_trust_score('${ACCOUNT}', 1)`), 11);
+eq("the second bump adds one on top", await scalar(`select public.bump_trust_score('${ACCOUNT}', 1)`), 12);
+eq(
+  "both increments are stored (no lost update)",
+  await scalar(`select trust_score from public.social_accounts where id = '${ACCOUNT}'`),
+  12
+);
+
+await exec(`update public.social_accounts set trust_score = 99 where id = '${ACCOUNT}'`);
+eq("the increment is clamped at 100", await scalar(`select public.bump_trust_score('${ACCOUNT}', 5)`), 100);
+
+await exec(`update public.social_accounts set trust_score = 2 where id = '${ACCOUNT}'`);
+eq("a negative delta is clamped at 0", await scalar(`select public.bump_trust_score('${ACCOUNT}', -10)`), 0);
+
+eq(
+  "bumping an unknown account changes nothing",
+  await scalar(`
+    select count(*)::int from (
+      select public.bump_trust_score('99999999-9999-4999-8999-999999999999', 1) as score
+    ) s where s.score is not null
+  `),
+  0
+);
+
+await exec(`update public.social_accounts set trust_score = 10 where id = '${ACCOUNT}'`);
 
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
