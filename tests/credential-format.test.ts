@@ -7,20 +7,20 @@ import {
   parseProxy
 } from "@/lib/accounts/credential-format";
 
-const SECRET = "GDS7FIVALRCIHH7Y7Y62FNOOUVLT37B5";
+const SECRET = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 test("parses the operator's export line", () => {
   const { accounts, issues } = parseAccountLines(
-    `61590750336672|vuongkaitlin25l|${SECRET}|103.166.184.92:16008:hma27:hma27`
+    `00000000000000|matkhau|${SECRET}|127.0.0.1:8080`
   );
 
   assert.equal(issues.length, 0);
   assert.deepEqual(accounts[0], {
     line: 1,
-    identifier: "61590750336672",
-    password: "vuongkaitlin25l",
+    identifier: "00000000000000",
+    password: "matkhau",
     twofaSecret: SECRET,
-    proxy: { host: "103.166.184.92", port: 16008, username: "hma27", password: "hma27" }
+    proxy: { host: "127.0.0.1", port: 8080, username: null, password: null }
   });
 });
 
@@ -74,5 +74,5 @@ test("a short UID is rejected — phone numbers are what the export contains", (
 });
 
 test("default name keeps the tail of the UID, which is what distinguishes accounts", () => {
-  assert.equal(defaultAccountName("61590750336672"), "FB 336672");
+  assert.equal(defaultAccountName("00000000000000"), "FB 000000");
 });
