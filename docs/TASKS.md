@@ -57,7 +57,7 @@
 - [x] **DOC-1** — `docs/REVIEW.md` — HR — 2026-10-26
 - [x] **DOC-2** — `docs/SHOPEE_API.md` — HR — 2026-10-26
 - [x] **DOC-3** — `docs/COLLAB.md`, `docs/AGENTS.md`, `docs/TASKS.md` — HR — 2026-10-26
-- [x] **DOC-4** — Review 6 PR đầu (#2–#7) — HR — 2026-10-26 — **6/6 APPROVE (static)**, comments đã đăng lên từng PR; conditions: PR #6 stacked → merge #5 trước; P2 findings đã ghi trong comment (không chặn)
+- [x] **DOC-4** — Review 13 PR (#2–#14) — HR — 2026-10-26 — **13/13 APPROVE (static)**, comments đã đăng. Thứ tự merge: #5 trước #6 (stacked P1); chuỗi Shopee #8→#9→…→#14 (stacked); **P1-5 + P1-3 merge TRƯỚC chuỗi Shopee** (types file đã regenerate kèm radar/sweep). Cảnh báo deploy ở PR #10 (check dup affiliate_short_link trước khi chạy unique index). Các nit P2 nằm trong comments.
 - [ ] **DOC-5** — Cập nhật TASKS + spec sau khi PM trả lời OPEN-Q — HR
 - [ ] **DOC-6** — Review các PR kế tiếp (monitor cron lo khi model ổn định lại; nếu cron còn error → PM báo HR review tay) — HR
 
