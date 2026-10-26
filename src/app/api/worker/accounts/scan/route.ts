@@ -6,9 +6,13 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/worker/accounts/scan?limit=1
  *
- * Accounts the radar may browse with. Deliberately the healthiest active ones:
- * scanning is low-risk but it is still traffic from the account's own profile, so
- * a cooling or checkpointed account is never used and the best trust score wins.
+ * Accounts the radar may browse with. Rotation is the point (docs/REVIEW.md P1-3):
+ * the account that scanned least recently goes first, and an account that reached
+ * `daily_scan_limit` in the last 24h is out. Before this, the same highest-trust
+ * account scanned every source on every cycle, all day.
+ *
+ * `scan_accounts()` also returns `scans_24h` so the worker log and this endpoint
+ * agree on the budget.
  */
 export async function GET(request: Request) {
   const auth = authorizeWorker(request);
@@ -20,15 +24,16 @@ export async function GET(request: Request) {
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from("social_accounts")
-    .select("id,name,browser_profile_id,proxy_ip,trust_score")
-    .eq("status", "active")
-    .not("browser_profile_id", "is", null)
-    .order("trust_score", { ascending: false })
-    .order("last_action_at", { ascending: true, nullsFirst: true })
-    .limit(limit)
+    .rpc("scan_accounts", { p_limit: limit })
     .overrideTypes<
-      { id: string; name: string; browser_profile_id: string | null; proxy_ip: string | null; trust_score: number }[],
+      {
+        id: string;
+        name: string;
+        browser_profile_id: string | null;
+        proxy_ip: string | null;
+        trust_score: number;
+        scans_24h: number;
+      }[],
       { merge: false }
     >();
 

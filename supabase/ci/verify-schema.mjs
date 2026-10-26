@@ -336,6 +336,10 @@ if (rolesAvailable) {
   record("authenticated cannot execute sweep_stuck_tasks", !(await canExecute("authenticated", "public.sweep_stuck_tasks(int)")));
   record("authenticated can execute the analytics RPCs", await canExecute("authenticated", "public.analytics_summary(timestamptz)"));
   record("authenticated keeps is_operator()", await canExecute("authenticated", "public.is_operator()"));
+  record("anon cannot execute scan_accounts", !(await canExecute("anon", "public.scan_accounts(int)")));
+  record("authenticated cannot execute scan_accounts", !(await canExecute("authenticated", "public.scan_accounts(int)")));
+  record("service_role can execute scan_accounts", await canExecute("service_role", "public.scan_accounts(int)"));
+  record("anon cannot execute radar_empty_streak", !(await canExecute("anon", "public.radar_empty_streak()")));
 } else {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
@@ -380,6 +384,72 @@ eq(
 );
 
 await exec(`delete from public.comment_tasks where post_url like '%/groups/stuck/posts/%'`);
+/* ------------------------------------- radar rotation, budget, blindness (P1-3) */
+// Rotation: the account that scanned least recently goes first, and one that spent
+// its daily scan budget is out. Before this, the highest-trust account scanned every
+// source on every cycle, all day.
+await exec(`
+  update public.social_accounts
+     set status = 'active', last_scanned_at = null, daily_scan_limit = 24,
+         browser_profile_id = coalesce(browser_profile_id, 'scan-profile')
+   where id in ('${ACCOUNT}', '44444444-4444-4444-8444-444444444444')
+`);
+
+eq(
+  "never-scanned accounts come first and are ordered deterministically",
+  (await rows(`select id::text as id from public.scan_accounts(2)`)).map((row) => row.id).sort(),
+  [ACCOUNT, "44444444-4444-4444-8444-444444444444"].sort()
+);
+
+await exec(`
+  update public.social_accounts set last_scanned_at = now() where id = '${ACCOUNT}';
+  update public.social_accounts set last_scanned_at = now() - interval '1 hour'
+   where id = '44444444-4444-4444-8444-444444444444'
+`);
+eq(
+  "the least recently scanned account is chosen next",
+  (await rows(`select id::text as id from public.scan_accounts(1)`))[0]?.id,
+  "44444444-4444-4444-8444-444444444444"
+);
+
+await exec(`
+  insert into public.radar_scans (account_id, source_id, posts_seen, created_at)
+  select '44444444-4444-4444-8444-444444444444', 'aaaa1111-1111-4111-8111-111111111111', 4, now()
+    from generate_series(1, 24) g
+`);
+eq(
+  "an account that spent its daily scan budget is not offered",
+  (await rows(`select id::text as id from public.scan_accounts(10)`)).some(
+    (row) => row.id === "44444444-4444-4444-8444-444444444444"
+  ),
+  false
+);
+
+// Blindness: trailing empty scans are counted, and a hit resets the streak.
+await exec(`delete from public.radar_scans`);
+eq("no scans means no streak", await scalar(`select public.radar_empty_streak()`), 0);
+
+await exec(`
+  insert into public.radar_scans (account_id, source_id, posts_seen, created_at)
+  values
+    ('${ACCOUNT}', 'aaaa1111-1111-4111-8111-111111111111', 0, now() - interval '30 minutes'),
+    ('${ACCOUNT}', 'aaaa1111-1111-4111-8111-111111111111', 0, now() - interval '20 minutes'),
+    ('${ACCOUNT}', 'aaaa1111-1111-4111-8111-111111111111', 0, now() - interval '10 minutes')
+`);
+eq("three empty scans in a row count as a streak", await scalar(`select public.radar_empty_streak()`), 3);
+
+await exec(`
+  insert into public.radar_scans (account_id, source_id, posts_seen, created_at)
+  values ('${ACCOUNT}', 'aaaa1111-1111-4111-8111-111111111111', 2, now())
+`);
+eq("a scan with posts resets the streak", await scalar(`select public.radar_empty_streak()`), 0);
+
+await exec(`
+  delete from public.radar_scans;
+  update public.social_accounts
+     set last_scanned_at = null, daily_scan_limit = 24
+   where id in ('${ACCOUNT}', '44444444-4444-4444-8444-444444444444')
+`);
 
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
