@@ -600,6 +600,8 @@ await exec(`
   update public.social_accounts
      set last_scanned_at = null, daily_scan_limit = 24
    where id in ('${ACCOUNT}', '44444444-4444-4444-8444-444444444444')
+`);
+
 /* --------------------------------------- one task per account per claim (P1-2) */
 // Two accounts, two queued tasks each. A single claim must return at most one task
 // per account — before this, every queued row of an account passed the "budget
