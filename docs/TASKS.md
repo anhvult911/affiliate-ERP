@@ -8,7 +8,7 @@
 
 - [x] **P0-ROT-1** — ~~Xoay credential~~ **PM quyết định 2026-10-26: tài khoản trong README là TK TEST → bỏ qua xoay.** Rủi ro chấp nhận: uid/pass/2FA/proxy trong README + git history bị coi là public. Việc còn lại của P0-1 (gỡ dòng, fixture giả, pre-commit scan) **không còn chờ gì** — **PM**
 - [x] **P0-ROT-2** — ~~Purge history~~ **PM: bỏ qua**, theo P0-ROT-1 (tk test) — **PM**
-- [ ] **P0-ROT-3** — Xoay `TELEGRAM_WEBHOOK_SECRET` + xác nhận secret强度 sau khi repo public (REVIEW §3.7) — **PM**
+- [ ] **P0-ROT-3** — Xoay `TELEGRAM_WEBHOOK_SECRET` + xác nhận độ mạnh secret sau khi repo public (REVIEW §3.7) — **PM**
 - [ ] **OPEN-Q** — Trả lời 8 open questions trong REVIEW.md §3 (đánh số 1–8) — **PM**
   - [x] Q1 → **đã trả lời: tk test, chấp nhận public** (P0-ROT-1) / [ ] Q2 số worker? / [x] Q3 → **PM duyệt đề xuất: 7 ngày** (2026-10-26) / [ ] Q4 quota Gemini?
   - [ ] Q5 local post thật có chủ đích? / Q6 Vercel plan vs ~1.440 heartbeat/ngày? / Q7 verify Telegram mức nào? / Q8 mức chấp nhận rủi ro ToS + số acc/cmd?
