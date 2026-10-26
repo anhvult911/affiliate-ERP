@@ -4,6 +4,7 @@ import {
   buildCaptureMessage,
   buildFailureMessage,
   buildStuckTasksMessage,
+  buildRadarBlindMessage,
   buildWorkerSilentMessage
 } from "@/lib/telegram/messages";
 import { loadCaptureView, loadFailureContext } from "@/lib/telegram/queries";
@@ -60,6 +61,25 @@ export async function notifyStuckTasks(input: {
     await sendMessage(text, keyboard);
   } catch (error) {
     console.error("[telegram] stuck-task notification failed", error instanceof Error ? error.message : error);
+  }
+}
+
+/**
+ * Alerts the operator that the radar produced nothing several times in a row — the
+ * silent failure mode of a selector change.
+ */
+export async function notifyRadarBlind(input: {
+  emptyStreak: number;
+  sourceId: string;
+  accountId: string | null;
+}): Promise<void> {
+  if (!isTelegramConfigured()) return;
+
+  try {
+    const { text, keyboard } = buildRadarBlindMessage(input);
+    await sendMessage(text, keyboard);
+  } catch (error) {
+    console.error("[telegram] radar-blind notification failed", error instanceof Error ? error.message : error);
   }
 }
 
