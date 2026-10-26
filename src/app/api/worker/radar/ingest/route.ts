@@ -6,6 +6,7 @@ import { pickDefaultAccount } from "@/lib/queue/assignment";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyNewCapture } from "@/lib/telegram/notify";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
+import { readSeen, recordSeen, shouldSkipSeen } from "@/lib/radar/seen-cache";
 import { normalizePostUrl } from "@/lib/worker/url";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,20 @@ export async function POST(request: Request) {
 
   if (existing) {
     return workerJson({ ok: true, created: false, duplicate: true, taskId: existing.id });
+  }
+
+  // Negative cache (P2-4): a post already judged below the threshold is not scored
+  // again until the entry expires. Without this every 15-minute scan re-embedded the
+  // same static top-of-feed posts.
+  const seen = await readSeen(supabase, postUrl);
+  if (shouldSkipSeen(seen)) {
+    return workerJson({
+      ok: true,
+      created: false,
+      cached: true,
+      score: seen?.score ?? null,
+      seenAt: seen?.seenAt ?? null
+    });
   }
 
   // A pinned product needs no AI matching — only the auto-match path does. This
@@ -173,10 +188,18 @@ export async function POST(request: Request) {
   }
 
   if (!matchedProductId || matchScore < threshold) {
-    await supabase
-      .from("target_sources")
-      .update({ last_scanned_at: new Date().toISOString() })
-      .eq("id", source.id);
+    await Promise.all([
+      supabase
+        .from("target_sources")
+        .update({ last_scanned_at: new Date().toISOString() })
+        .eq("id", source.id),
+      recordSeen(supabase, {
+        postUrl,
+        sourceId: source.id,
+        score: matchScore,
+        reason: matchReason.slice(0, 500)
+      })
+    ]);
 
     return workerJson({
       ok: true,
