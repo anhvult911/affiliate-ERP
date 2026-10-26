@@ -303,6 +303,28 @@ Money and percentages are parsed separately on purpose: `890.000đ` is 890,000 (
 Shopee item id, whether already in the database or earlier in the same file — are
 reported per row and skipped, so pasting the same export twice is harmless.
 
+## Shopee Affiliate API (optional)
+
+Products have two ingestion paths: **Nhập CSV** (works today) and, once Shopee grants
+API access, a direct sync. The API is the *publisher* GraphQL endpoint
+(`open-api.affiliate.shopee.vn/graphql`) — not the seller Open Platform.
+
+```bash
+SHOPEE_AFFILIATE_APP_ID="..."
+SHOPEE_AFFILIATE_APP_SECRET="..."
+```
+
+App ID and Secret are in the affiliate dashboard → **Open API**. Access must be
+requested and approved first; until it is, every call returns
+`10035 You currently do not have access to the Shopee Affiliate Open API Platform`.
+Requests are signed statelessly (`SHA256(appId + timestamp + body + secret)`), so
+there is no token to refresh and no rotation flow — losing the secret means asking
+Shopee for a new one.
+
+The secret is read from the environment only: it is never logged, never included in
+Telegram alerts and never written to the database. `describeShopeeConfig()` is the
+only shape allowed in logs.
+
 ## Order reconciliation
 
 Affiliate networks report an order the moment it happens, which can be before the task
