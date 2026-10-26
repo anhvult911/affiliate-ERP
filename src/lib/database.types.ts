@@ -49,6 +49,20 @@ isOneToOne: false
       referencedColumns: ["task_id"]
     }
                   ]
+                },"affiliate_sync_state": {
+                  Row: {
+                    "id": string,"kind": string,"last_error": string | null,"last_run_at": string | null,"updated_at": string,"watermark": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"kind": string,"last_error"?: string | null,"last_run_at"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                  }
+                  Update: {
+                    "id"?: string,"kind"?: string,"last_error"?: string | null,"last_run_at"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"comment_tasks": {
                   Row: {
                     "ai_draft_comment": string | null,"approved_at": string | null,"assigned_account_id": string | null,"attempt_count": number,"claimed_at": string | null,"claimed_by": string | null,"created_at": string,"executed_at": string | null,"execution_mode": Database["public"]['Enums']["execution_mode"],"execution_note": string | null,"id": string,"last_error": string | null,"match_score": number | null,"matched_product_id": string | null,"post_content": string | null,"post_images": NonNullable<Json>,"post_url": string,"review_note": string | null,"secondary_account_id": string | null,"selected_review_image": string | null,"source_id": string | null,"status": Database["public"]['Enums']["task_status"],"sub_id_code": string | null,"updated_at": string
@@ -310,6 +324,11 @@ isOneToOne: false
               "avg_trust": number,"status": Database["public"]['Enums']["account_status"],"total": number
             }[]
                            },
+"advance_sync_watermark":
+{ Args: { "p_kind": string,"p_watermark": string }; Returns: {
+              "kind": string,"last_run_at": string,"watermark": string
+            }[]
+                           },
 "analytics_by_account":
 { Args: { "p_since"?: string }; Returns: {
               "commission": number,"label": string,"orders": number,"revenue": number
@@ -393,6 +412,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "attributed": number,"remaining": number
             }[]
+                           },
+"record_sync_error":
+{ Args: { "p_error": string,"p_kind": string }; Returns: undefined
                            },
 "scan_accounts":
 { Args: { "p_limit"?: number }; Returns: {
