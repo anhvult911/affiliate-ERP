@@ -1,6 +1,12 @@
 import type { SupabaseDb } from "@/lib/db";
 import { isTelegramConfigured, sendMessage } from "@/lib/telegram/api";
-import { buildCaptureMessage, buildFailureMessage, buildWorkerSilentMessage } from "@/lib/telegram/messages";
+import {
+  buildCaptureMessage,
+  buildFailureMessage,
+  buildStuckTasksMessage,
+  buildRadarBlindMessage,
+  buildWorkerSilentMessage
+} from "@/lib/telegram/messages";
 import { loadCaptureView, loadFailureContext } from "@/lib/telegram/queries";
 
 /**
@@ -37,6 +43,43 @@ export async function notifyTaskFailure(db: SupabaseDb, taskId: string): Promise
     await sendMessage(text, keyboard);
   } catch (error) {
     console.error("[telegram] failure notification failed", error instanceof Error ? error.message : error);
+  }
+}
+
+/**
+ * Alerts the operator that stuck tasks were closed by the sweep. Separate from
+ * `notifyWorkerSilent` on purpose: a healthy worker can still leave a task behind.
+ */
+export async function notifyStuckTasks(input: {
+  swept: { taskId: string; accountId: string | null; attemptCount: number; postUrl: string | null }[];
+  remainingRunning: number;
+}): Promise<void> {
+  if (!isTelegramConfigured()) return;
+
+  try {
+    const { text, keyboard } = buildStuckTasksMessage(input);
+    await sendMessage(text, keyboard);
+  } catch (error) {
+    console.error("[telegram] stuck-task notification failed", error instanceof Error ? error.message : error);
+  }
+}
+
+/**
+ * Alerts the operator that the radar produced nothing several times in a row — the
+ * silent failure mode of a selector change.
+ */
+export async function notifyRadarBlind(input: {
+  emptyStreak: number;
+  sourceId: string;
+  accountId: string | null;
+}): Promise<void> {
+  if (!isTelegramConfigured()) return;
+
+  try {
+    const { text, keyboard } = buildRadarBlindMessage(input);
+    await sendMessage(text, keyboard);
+  } catch (error) {
+    console.error("[telegram] radar-blind notification failed", error instanceof Error ? error.message : error);
   }
 }
 

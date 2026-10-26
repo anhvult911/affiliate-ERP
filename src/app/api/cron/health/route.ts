@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorizeCron } from "@/lib/cron/auth";
 import { adminDb, type SupabaseDb } from "@/lib/db";
-import { notifyWorkerSilent } from "@/lib/telegram/notify";
+import { notifyStuckTasks, notifyWorkerSilent } from "@/lib/telegram/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,13 @@ const ALERT_THROTTLE_MS = 60 * 60_000;
 
 type Heartbeat = { worker: string; last_seen_at: string; alerted_at: string | null; mode: string | null };
 
+type StuckTask = {
+  task_id: string;
+  account_id: string | null;
+  attempt_count: number;
+  post_url: string | null;
+};
+
 async function countByStatus(db: SupabaseDb, status: "pending_approval" | "queued" | "running") {
   const { count } = await db
     .from("comment_tasks")
@@ -41,6 +48,19 @@ async function handle(request: Request) {
   const staleMinutes = Number(process.env.WORKER_STALE_MINUTES?.trim() || 10);
   const now = Date.now();
   const db = adminDb();
+
+  // Stuck tasks are swept on every run, before the summary: a row whose lease
+  // expired and whose retries are spent can never be claimed again, so leaving it in
+  // `running` both hides real backlog and keeps the dashboard lying.
+  const sweep = await db
+    .rpc("sweep_stuck_tasks", { p_lease_minutes: Number(process.env.WORKER_LEASE_MINUTES?.trim() || 15) })
+    .overrideTypes<StuckTask[], { merge: false }>();
+
+  if (sweep.error) {
+    return NextResponse.json({ ok: false, error: sweep.error.message }, { status: 500 });
+  }
+
+  const stuck = sweep.data ?? [];
 
   const [{ data: heartbeats, error }, pending, queued, running] = await Promise.all([
     db
@@ -61,12 +81,26 @@ async function handle(request: Request) {
   const backlog = { pendingApproval: pending, queued, running };
   const backlogSize = pending + queued + running;
 
+  // Alerts after the counts, so "remaining running" reflects what the sweep left.
+  if (stuck.length > 0) {
+    await notifyStuckTasks({
+      swept: stuck.map((task) => ({
+        taskId: task.task_id,
+        accountId: task.account_id,
+        attemptCount: task.attempt_count,
+        postUrl: task.post_url
+      })),
+      remainingRunning: running
+    });
+  }
+
   if (workers.length === 0) {
     // Nothing has ever checked in. That is a setup problem, not a silent failure,
     // and the dashboard already shows tasks sitting in the queue.
     return NextResponse.json({
       ok: true,
       status: "no-worker-registered",
+      swept: stuck.length,
       backlog,
       hint: "No worker has ever sent a heartbeat. Start the worker and it will register itself."
     });
@@ -78,6 +112,7 @@ async function handle(request: Request) {
     return NextResponse.json({
       ok: true,
       status: "healthy",
+      swept: stuck.length,
       staleMinutes,
       workers: workers.map((worker) => ({ worker: worker.worker, lastSeenAt: worker.last_seen_at })),
       backlog
@@ -90,6 +125,7 @@ async function handle(request: Request) {
     return NextResponse.json({
       ok: true,
       status: "silent-idle",
+      swept: stuck.length,
       staleMinutes,
       staleWorkers: stale.map((worker) => ({ worker: worker.worker, lastSeenAt: worker.last_seen_at })),
       backlog,
@@ -105,6 +141,7 @@ async function handle(request: Request) {
     return NextResponse.json({
       ok: true,
       status: "stale",
+      swept: stuck.length,
       alerted: false,
       throttled: true,
       staleWorkers: stale.map((worker) => ({ worker: worker.worker, lastSeenAt: worker.last_seen_at })),

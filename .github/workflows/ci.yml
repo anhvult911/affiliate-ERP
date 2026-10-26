@@ -1,0 +1,49 @@
+name: CI
+
+# Every task in docs/TASKS.md is "done" only when these two commands pass, and the
+# repo had no gate at all: fourteen PRs could merge without a single test run.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same PR makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · test · schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from package.json (packageManager), so CI and the
+      # developer machine cannot drift.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # --frozen-lockfile: a PR that edits dependencies must also update the lockfile,
+      # otherwise install fails here instead of on someone's machine.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      # PGlite runs Postgres in WASM, so the schema suite needs no Docker service.
+      - name: Schema and RPC verification
+        run: pnpm verify:schema

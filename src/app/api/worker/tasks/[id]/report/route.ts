@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyTaskFailure } from "@/lib/telegram/notify";
+import { resolveExecutedAt } from "@/lib/worker/report-time";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +73,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     .from("comment_tasks")
     .update({
       status,
-      executed_at: parsed.data.executedAt ?? new Date().toISOString(),
+      // The server owns the timestamp (P2-7); a client value only wins inside the
+      // tolerance, so a skewed worker clock cannot backdate the row.
+      executed_at: resolveExecutedAt(parsed.data.executedAt),
       last_error: status === "failed" ? (parsed.data.error ?? "Worker reported failure") : null,
       execution_note: parsed.data.note ?? null
     })
@@ -91,7 +94,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       last_action_at: string;
       status?: "cooldown" | "checkpoint";
       cooldown_until?: string | null;
-      trust_score?: number;
     } = { last_action_at: new Date().toISOString() };
 
     if (accountStatus) {
@@ -102,24 +104,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           : null;
     }
 
-    // A successful run earns trust — unless the same report flagged the account
-    // for checkpoint, in which case trust is reset by the operator, not the worker.
-    if (status === "completed" && accountStatus !== "checkpoint") {
-      const { data: account } = await supabase
-        .from("social_accounts")
-        .select("trust_score")
-        .eq("id", task.assigned_account_id)
-        .maybeSingle();
-
-      accountPatch.trust_score = Math.min(100, (account?.trust_score ?? 0) + 1);
-    }
-
     const { error: accountError } = await supabase
       .from("social_accounts")
       .update(accountPatch)
       .eq("id", task.assigned_account_id);
 
     if (accountError) return workerJson({ ok: false, error: accountError.message }, 500);
+
+    // A successful run earns trust — unless the same report flagged the account for
+    // checkpoint, in which case trust is reset by the operator, not the worker. The
+    // increment is one statement (P2-6): read-modify-write lost increments when two
+    // reports landed together.
+    if (status === "completed" && accountStatus !== "checkpoint") {
+      const { error: bumpError } = await supabase
+        .rpc("bump_trust_score", { p_account_id: task.assigned_account_id, p_delta: 1 });
+
+      if (bumpError) return workerJson({ ok: false, error: bumpError.message }, 500);
+    }
 
     /*
      * In 2-tier mode the tier-2 account also published (the link reply), so it
@@ -132,21 +133,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       task.secondary_account_id &&
       !accountStatus
     ) {
-      const { data: secondary } = await supabase
-        .from("social_accounts")
-        .select("trust_score")
-        .eq("id", task.secondary_account_id)
-        .maybeSingle();
-
       const { error: secondaryError } = await supabase
         .from("social_accounts")
-        .update({
-          last_action_at: new Date().toISOString(),
-          trust_score: Math.min(100, (secondary?.trust_score ?? 0) + 1)
-        })
+        .update({ last_action_at: new Date().toISOString() })
         .eq("id", task.secondary_account_id);
 
       if (secondaryError) return workerJson({ ok: false, error: secondaryError.message }, 500);
+
+      const { error: secondaryBumpError } = await supabase
+        .rpc("bump_trust_score", { p_account_id: task.secondary_account_id, p_delta: 1 });
+
+      if (secondaryBumpError) {
+        return workerJson({ ok: false, error: secondaryBumpError.message }, 500);
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { CONVERSION_STATUSES, type ConversionStatus } from "@/lib/constants";
+import { CONVERSION_STATUSES } from "@/lib/constants";
+import { applyConversion, reconcileAfterIngest } from "@/lib/shopee/conversions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { readPostbackBody } from "@/lib/worker/postback-body";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
@@ -20,19 +21,6 @@ const postbackSchema = z.object({
   status: z.enum(CONVERSION_STATUSES).default("pending"),
   converted_at: z.string().datetime().optional()
 });
-
-/**
- * Status only ever moves forward. `canceled` wins from anywhere (refunds and
- * cancellations arrive late); a `settled` order is never demoted back to
- * `pending` by a replayed or out-of-order callback.
- */
-function nextStatus(current: ConversionStatus, incoming: ConversionStatus): ConversionStatus {
-  if (current === incoming) return current;
-  if (incoming === "canceled") return "canceled";
-  if (current === "canceled") return "canceled";
-  if (current === "settled" && incoming === "pending") return "settled";
-  return incoming;
-}
 
 /**
  * POST /api/postback/shopee
@@ -57,105 +45,33 @@ export async function POST(request: Request) {
   }
 
   const payload = parsed.data;
-  const supabase = createSupabaseAdminClient();
 
-  const { data: existing, error: existingError } = await supabase
-    .from("affiliate_conversions")
-    .select(
-      "id,task_id,sub_id,external_order_id,order_amount,estimated_commission,status,converted_at"
-    )
-    .eq("external_order_id", payload.order_id)
-    .maybeSingle();
+  try {
+    const result = await applyConversion(createSupabaseAdminClient(), {
+      subId: payload.sub_id,
+      externalOrderId: payload.order_id,
+      orderAmount: payload.order_amount ?? null,
+      estimatedCommission: payload.estimated_commission ?? null,
+      status: payload.status,
+      convertedAt: payload.converted_at ?? null
+    });
 
-  if (existingError) return workerJson({ ok: false, error: existingError.message }, 500);
-
-  const warnings: string[] = [];
-
-  if (existing) {
-    const subId = existing.sub_id;
-    if (subId !== payload.sub_id) {
-      warnings.push(
-        `Sub_ID mismatch: kept ${subId}, ignored ${payload.sub_id}. Reassignment would move revenue between tasks.`
-      );
-    }
-    if (payload.order_amount !== null && payload.order_amount !== undefined && payload.order_amount < Number(existing.order_amount)) {
-      warnings.push("Incoming amount is lower than the stored one; kept the higher value.");
-    }
-
-    const { data: updated, error: updateError } = await supabase
-      .from("affiliate_conversions")
-      .update({
-        status: nextStatus(existing.status, payload.status),
-        order_amount: Math.max(Number(existing.order_amount), payload.order_amount ?? 0),
-        estimated_commission: Math.max(
-          Number(existing.estimated_commission),
-          payload.estimated_commission ?? 0
-        ),
-        // converted_at stays at the first sighting; replays must not re-date it.
-        task_id: existing.task_id
-      })
-      .eq("id", existing.id)
-      .select("id,task_id,status")
-      .single();
-
-    if (updateError) return workerJson({ ok: false, error: updateError.message }, 500);
+    // Attribution is a single rule shared with the cron: a Sub_ID that appears later
+    // still attaches, without a second write path that could double-count.
+    await reconcileAfterIngest(createSupabaseAdminClient()).catch(() => undefined);
 
     return workerJson({
       ok: true,
-      conversionId: updated.id,
-      attributed: Boolean(updated.task_id),
-      updated: true,
-      status: updated.status,
-      warnings
+      conversionId: result.conversionId,
+      attributed: Boolean(result.taskId),
+      updated: !result.created,
+      created: result.created,
+      status: result.status,
+      warnings: result.warnings
     });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const conflict = /stored concurrently/.test(message);
+    return workerJson({ ok: false, error: message }, conflict ? 409 : 500);
   }
-
-  const { data: task, error: taskError } = await supabase
-    .from("comment_tasks")
-    .select("id")
-    .eq("sub_id_code", payload.sub_id)
-    .maybeSingle();
-
-  // A failed lookup must not silently store an unattributed row that would then
-  // shadow the attributed one for this order id.
-  if (taskError) return workerJson({ ok: false, error: taskError.message }, 500);
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("affiliate_conversions")
-    .insert({
-      task_id: task?.id ?? null,
-      sub_id: payload.sub_id,
-      external_order_id: payload.order_id,
-      order_amount: payload.order_amount ?? 0,
-      estimated_commission: payload.estimated_commission ?? 0,
-      status: payload.status,
-      converted_at: payload.converted_at ?? new Date().toISOString()
-    })
-    .select("id,task_id")
-    .single();
-
-  if (insertError) {
-    // 23505: a concurrent replay inserted the same order id between our read and
-    // write. The row now exists, so the next callback takes the merge path.
-    if (insertError.code === "23505") {
-      return workerJson(
-        { ok: false, error: "This order id was stored concurrently — replay the callback." },
-        409
-      );
-    }
-    return workerJson({ ok: false, error: insertError.message }, 500);
-  }
-
-  if (!task) {
-    warnings.push("No task owns this Sub_ID yet — stored unattributed.");
-  }
-
-  return workerJson({
-    ok: true,
-    conversionId: inserted.id,
-    attributed: Boolean(inserted.task_id),
-    updated: false,
-    status: payload.status,
-    warnings
-  });
 }
