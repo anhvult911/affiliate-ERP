@@ -12,7 +12,7 @@ Bạn là agent (OpenCode / Hermes / khác) mới mở repo này. Đọc theo th
 
 ## 5 luật cứng
 
-1. **Không commit secret** — `.env`, mật khẩu, TOTP, token. Fixture phải là giá trị giả rõ ràng. (Bài học P0-1: một dòng credential thật đã lọt vào README khi repo public.)
+1. **Không commit secret** — `.env`, mật khẩu, TOTP, token. Fixture phải là giá trị giả rõ ràng. (Bài học P0-1: một dòng credential (sau đó PM xác nhận là TK test) từng lọt vào README khi repo public.)
 2. **Không sửa `docs/`** — của agent review. Phản hồi → issue/PR comment.
 3. **1 task = 1 nhánh = 1 owner**; commit đầu có ID task (`P1-2: ...`).
 4. **Không code theo phỏng đoán khi có open question** — 8 câu hỏi trong `docs/REVIEW.md` §3 là của PM. Không trả lời thay.

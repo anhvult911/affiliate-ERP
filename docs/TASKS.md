@@ -6,17 +6,17 @@
 
 ## A. Của PM — làm trước, không ủy quyền được
 
-- [ ] **P0-ROT-1** — Xoay ngay credential FB trong REVIEW.md P0-1: đổi mật khẩu, reset 2FA, đăng xuất mọi phiên (tài khoản trong README:247 + mọi acc dùng chung proxy) — **PM**
-- [ ] **P0-ROT-2** — Quyết định xử lý git history (xóa-tạo repo vs BFG purge) — **PM** (OC chờ xác nhận mới được rewrite history)
+- [x] **P0-ROT-1** — ~~Xoay credential~~ **PM quyết định 2026-10-26: tài khoản trong README là TK TEST → bỏ qua xoay.** Rủi ro chấp nhận: uid/pass/2FA/proxy trong README + git history bị coi là public. Việc còn lại của P0-1 (gỡ dòng, fixture giả, pre-commit scan) **không còn chờ gì** — **PM**
+- [x] **P0-ROT-2** — ~~Purge history~~ **PM: bỏ qua**, theo P0-ROT-1 (tk test) — **PM**
 - [ ] **P0-ROT-3** — Xoay `TELEGRAM_WEBHOOK_SECRET` + xác nhận secret强度 sau khi repo public (REVIEW §3.7) — **PM**
 - [ ] **OPEN-Q** — Trả lời 8 open questions trong REVIEW.md §3 (đánh số 1–8) — **PM**
-  - [ ] Q1 credential có thật? / Q2 số worker? / Q3 tuổi task tối đa (đề xuất 7 ngày)? / Q4 quota Gemini?
+  - [x] Q1 → **đã trả lời: tk test, chấp nhận public** (P0-ROT-1) / [ ] Q2 số worker? / Q3 tuổi task tối đa (đề xuất 7 ngày)? / Q4 quota Gemini?
   - [ ] Q5 local post thật có chủ đích? / Q6 Vercel plan vs ~1.440 heartbeat/ngày? / Q7 verify Telegram mức nào? / Q8 mức chấp nhận rủi ro ToS + số acc/cmd?
 - [ ] **SHOPEE-CRED** — Xin App ID/Secret Shopee Affiliate Open API (dashboard affiliate → Open API) — **PM** → mở khoá T-SHOPEE-04..08, 11
 
 ## B. Code gấp (OpenCode)
 
-- [ ] **P0-1** — Gỡ dòng `uid|pass|2FA|proxy` khỏi `README.md:247`, `credential-format.ts:7`, placeholder trong `import-accounts-dialog.tsx:23-24`; thay fixture giả; thêm pre-commit secret scan — **OC** *(chờ P0-ROT-1 xong để PM xác nhận giá trị đã xoay)*
+- [ ] **P0-1** — Gỡ dòng `uid|pass|2FA|proxy` khỏi `README.md:247`, `credential-format.ts:7`, placeholder trong `import-accounts-dialog.tsx:23-24`; thay fixture giả; thêm pre-commit secret scan — **OC** *(PM xác nhận tk test 2026-10-26 → CHẠY ĐƯỢC NGAY, không chờ)*
 - [ ] **P1-1** — `authorizeWorker` → constant-time compare (theo pattern `src/lib/cron/auth.ts`) — **OC** — AC: `auth.ts` không còn `!==` so token; test mới
 - [ ] **P1-2** — Sửa claim: tối đa 1 task/account/lần claim (`row_number() partition by assigned_account_id`) — **OC** — AC: verify-schema pass + test "một claim chỉ lấy 1 task/account"; vượt limit 7+25 phải fail test
 - [ ] **P1-3** — Radar: xoay vòng account quét (sắp theo `last_action_at`), ngân sách vòng quét/ngày, alert N vòng 0-post liên tiếp — **OC**
@@ -61,4 +61,4 @@
 - [ ] **DOC-5** — Cập nhật TASKS + spec sau khi PM trả lời OPEN-Q — HR
 
 ---
-*Cập nhật lần cuối: 2026-10-26 (HR). PM chưa tick mục A → các task có ⛔/chờ vẫn đứng.*
+*Cập nhật lần cuối: 2026-10-26 (HR) — PM xác nhận credential trong README là TK TEST (P0-ROT-1/2 đóng, Q1 xong) → P0-1 và T-SHOPEE-01..03,05,09,10,12,13 CHẠY ĐƯỢC NGAY. Các ⛔ còn lại chờ Q2–Q8 + SHOPEE-CRED.*
