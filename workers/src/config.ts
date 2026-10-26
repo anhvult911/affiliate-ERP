@@ -178,7 +178,7 @@ export function loadConfig(): WorkerConfig {
     radarPinnedProductId: process.env.RADAR_PINNED_PRODUCT_ID?.trim() || null,
     randomSeed: process.env.RANDOM_SEED ? readNumber("RANDOM_SEED", 1) : null,
     ignoreProxy: hasFlag("no-proxy") || readBoolean("IGNORE_PROXY", false),
-    dryRunClaims: readBoolean("DRY_RUN_CLAIMS", false)
+    dryRunClaims: readBoolean("DRY_RUN_CLAIMS", false),
     allowLocalPosting: readBoolean("ALLOW_LOCAL_POSTING", false)
   };
 
