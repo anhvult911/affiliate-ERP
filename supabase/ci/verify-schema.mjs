@@ -334,6 +334,10 @@ if (rolesAvailable) {
   record("anon cannot execute the analytics RPCs", !(await canExecute("anon", "public.analytics_summary(timestamptz)")));
   record("authenticated can execute the analytics RPCs", await canExecute("authenticated", "public.analytics_summary(timestamptz)"));
   record("authenticated keeps is_operator()", await canExecute("authenticated", "public.is_operator()"));
+  record("anon cannot execute advance_sync_watermark",
+    !(await canExecute("anon", "public.advance_sync_watermark(text,timestamptz)")));
+  record("authenticated cannot execute record_sync_error",
+    !(await canExecute("authenticated", "public.record_sync_error(text,text)")));
 } else {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
@@ -385,6 +389,61 @@ try {
   badSyncSourceRejected = /products_sync_source_check/.test(String(error.message));
 }
 record("sync_source only accepts csv or api", badSyncSourceRejected);
+
+/* ------------------------------------ sync state: resume watermark (T-SHOPEE-09) */
+eq(
+  "sync state starts empty",
+  await rows(`select count(*)::int as n from public.affiliate_sync_state`),
+  [{ n: 0 }]
+);
+
+eq(
+  "advancing a watermark creates the row",
+  await rows(`select kind, watermark is not null as has_watermark
+                from public.advance_sync_watermark('conversion', '2026-10-26T10:00:00Z')`),
+  [{ kind: "conversion", has_watermark: true }]
+);
+
+// A later run must be able to move the watermark forward...
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-26T12:00:00Z')`);
+eq(
+  "the watermark moves forward",
+  new Date(await scalar(`select watermark from public.affiliate_sync_state where kind = 'conversion'`)).toISOString(),
+  "2026-10-26T12:00:00.000Z"
+);
+
+// ...but a stale run must never rewind it.
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-25T09:00:00Z')`);
+eq(
+  "a stale run cannot rewind the watermark",
+  new Date(await scalar(`select watermark from public.affiliate_sync_state where kind = 'conversion'`)).toISOString(),
+  "2026-10-26T12:00:00.000Z"
+);
+
+await exec(`select public.record_sync_error('conversion', 'boom: 10030')`);
+eq(
+  "a failure records the reason without touching the watermark",
+  await rows(`select last_error, watermark is not null as has_watermark
+                from public.affiliate_sync_state where kind = 'conversion'`),
+  [{ last_error: "boom: 10030", has_watermark: true }]
+);
+
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-26T13:00:00Z')`);
+eq(
+  "a successful advance clears the previous error",
+  await rows(`select last_error from public.affiliate_sync_state where kind = 'conversion'`),
+  [{ last_error: null }]
+);
+
+let badKindRejected = false;
+try {
+  await exec(`insert into public.affiliate_sync_state (kind) values ('unknown')`);
+} catch (error) {
+  badKindRejected = /affiliate_sync_state_kind_check/.test(String(error.message));
+}
+record("sync kind is constrained to the three jobs", badKindRejected);
+
+await exec(`delete from public.affiliate_sync_state`);
 
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
