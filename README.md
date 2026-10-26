@@ -372,9 +372,16 @@ DRY_RUN=false EXECUTOR=fixture pnpm worker:once    # full path against a local t
 DRY_RUN=false ANTIDETECT_PROVIDER=gpm pnpm worker:dev
 ```
 
-Safety: `DRY_RUN` defaults to `true`, and the worker refuses to post for real with
-`ANTIDETECT_PROVIDER=local`. It also checks the account's proxy is reachable
-before launching, because a dead proxy makes Chromium fall back to the host IP.
+Safety: `DRY_RUN` defaults to `true`. A real post with `ANTIDETECT_PROVIDER=local` is
+refused unless `ALLOW_LOCAL_POSTING=true` is set — that provider has no fingerprint
+masking, so every account on the machine shares one fingerprint. The worker also checks
+the account's proxy is reachable before launching, because a dead proxy makes Chromium
+fall back to the host IP.
+
+```bash
+# real posting on the operator's own Chrome is an explicit decision
+DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:once
+```
 
 ## Verifying the schema without a database server
 
