@@ -338,6 +338,10 @@ if (rolesAvailable) {
     !(await canExecute("anon", "public.advance_sync_watermark(text,timestamptz)")));
   record("authenticated cannot execute record_sync_error",
     !(await canExecute("authenticated", "public.record_sync_error(text,text)")));
+  record("anon cannot execute acquire_sync_lock",
+    !(await canExecute("anon", "public.acquire_sync_lock(text,text,int)")));
+  record("authenticated cannot execute release_sync_lock",
+    !(await canExecute("authenticated", "public.release_sync_lock(text,text)")));
 } else {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
@@ -444,6 +448,47 @@ try {
 record("sync kind is constrained to the three jobs", badKindRejected);
 
 await exec(`delete from public.affiliate_sync_state`);
+
+/* ------------------------------- single-flight sync lock (T-SHOPEE-13) */
+eq(
+  "the lock is free at first",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-a', 60)`),
+  true
+);
+eq(
+  "a second caller cannot take a live lock",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-b', 60)`),
+  false
+);
+eq(
+  "the owner can release it",
+  await exec(`select public.release_sync_lock('product', 'cron-a')`).then(() =>
+    scalar(`select public.acquire_sync_lock('product', 'cron-b', 60)`)
+  ),
+  true
+);
+
+// A different owner must not release somebody else's lease.
+await exec(`select public.release_sync_lock('product', 'cron-a')`);
+eq(
+  "a non-owner cannot release the lease",
+  await scalar(`select locked_by from public.affiliate_sync_state where kind = 'product'`),
+  "cron-b"
+);
+
+// A crashed run leaves a lease behind; it must expire rather than block forever.
+await exec(`
+  update public.affiliate_sync_state
+     set locked_until = now() - interval '1 minute'
+   where kind = 'product'
+`);
+eq(
+  "an expired lease can be taken over",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-c', 60)`),
+  true
+);
+
+await exec(`delete from public.affiliate_sync_state where kind = 'product'`);
 
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is

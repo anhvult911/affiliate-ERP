@@ -51,14 +51,14 @@ isOneToOne: false
                   ]
                 },"affiliate_sync_state": {
                   Row: {
-                    "id": string,"kind": string,"last_error": string | null,"last_run_at": string | null,"updated_at": string,"watermark": string | null
+                    "id": string,"kind": string,"last_error": string | null,"last_run_at": string | null,"locked_by": string | null,"locked_until": string | null,"updated_at": string,"watermark": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "id"?: string,"kind": string,"last_error"?: string | null,"last_run_at"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                    "id"?: string,"kind": string,"last_error"?: string | null,"last_run_at"?: string | null,"locked_by"?: string | null,"locked_until"?: string | null,"updated_at"?: string,"watermark"?: string | null
                   }
                   Update: {
-                    "id"?: string,"kind"?: string,"last_error"?: string | null,"last_run_at"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                    "id"?: string,"kind"?: string,"last_error"?: string | null,"last_run_at"?: string | null,"locked_by"?: string | null,"locked_until"?: string | null,"updated_at"?: string,"watermark"?: string | null
                   }
                   Relationships: [
                     
@@ -324,6 +324,9 @@ isOneToOne: false
               "avg_trust": number,"status": Database["public"]['Enums']["account_status"],"total": number
             }[]
                            },
+"acquire_sync_lock":
+{ Args: { "p_kind": string,"p_owner": string,"p_ttl_seconds"?: number }; Returns: boolean
+                           },
 "advance_sync_watermark":
 { Args: { "p_kind": string,"p_watermark": string }; Returns: {
               "kind": string,"last_run_at": string,"watermark": string
@@ -415,6 +418,9 @@ isOneToOne: false
                            },
 "record_sync_error":
 { Args: { "p_error": string,"p_kind": string }; Returns: undefined
+                           },
+"release_sync_lock":
+{ Args: { "p_kind": string,"p_owner": string }; Returns: undefined
                            },
 "scan_accounts":
 { Args: { "p_limit"?: number }; Returns: {
