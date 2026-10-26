@@ -1,10 +1,14 @@
 /**
  * Worker configuration.
  *
- * Safety rule encoded here: the worker refuses to run outside dry-run unless a
- * real antidetect provider is configured. Posting comments on Facebook from an
- * unattended process is the highest-risk action in this system, so the default
- * has to be "do nothing to the outside world".
+ * Safety rule encoded here: with the `local` provider (the operator's own Chrome, no
+ * fingerprint masking) a real post also requires `ALLOW_LOCAL_POSTING=true`. Posting on
+ * Facebook from an unattended process is the highest-risk action in this system, so
+ * the safe default is "do nothing to the outside world", and turning that off has to
+ * be an explicit decision rather than a side effect of setting DRY_RUN=false.
+ *
+ * docs/REVIEW.md P2-1: this rule was documented for months while the code did not
+ * implement it. It exists now, and the README describes exactly what it does.
  */
 
 export type ProviderName = "gpm" | "genlogin" | "local";
@@ -49,6 +53,8 @@ export type WorkerConfig = {
   radarPinnedProductId: string | null;
   /** Deterministic delays for reproducible dry runs. */
   randomSeed: number | null;
+  /** Set by ALLOW_LOCAL_POSTING=true: permits real posts with the `local` provider. */
+  allowLocalPosting: boolean;
   /**
    * Browse from the host IP instead of the account's proxy. Only for a deliberate
    * "this account lives on my home connection" decision — the worker logs it on
@@ -173,6 +179,7 @@ export function loadConfig(): WorkerConfig {
     randomSeed: process.env.RANDOM_SEED ? readNumber("RANDOM_SEED", 1) : null,
     ignoreProxy: hasFlag("no-proxy") || readBoolean("IGNORE_PROXY", false),
     dryRunClaims: readBoolean("DRY_RUN_CLAIMS", false)
+    allowLocalPosting: readBoolean("ALLOW_LOCAL_POSTING", false)
   };
 
   if (config.warmingOnly && !config.warmingEnabled) {
@@ -183,5 +190,34 @@ export function loadConfig(): WorkerConfig {
     throw new Error("WORKER_API_TOKEN is required — it must match the web app's value.");
   }
 
+  assertPostingAllowed(config);
+
   return config;
+}
+
+/**
+ * Refuses a real post with the `local` provider unless the operator opted in.
+ *
+ * The fixture executor is exempt (it posts to a local page), and so is dry-run. This
+ * is the guard docs/REVIEW.md P2-1 found missing: `DRY_RUN=false
+ * ANTIDETECT_PROVIDER=local` used to post for real with no acknowledgement at all.
+ */
+export function assertPostingAllowed(config: {
+  dryRun: boolean;
+  provider: ProviderName;
+  executor: ExecutorName;
+  allowLocalPosting: boolean;
+}): void {
+  if (config.dryRun) return;
+  if (config.executor === "fixture") return;
+  if (config.provider !== "local") return;
+  if (config.allowLocalPosting) return;
+
+  throw new Error(
+    "Refusing to post for real with ANTIDETECT_PROVIDER=local — this provider has no " +
+      "fingerprint masking, so every account on this machine shares one fingerprint. " +
+      "Set ALLOW_LOCAL_POSTING=true if that is a deliberate, accepted risk " +
+      "(see docs/REVIEW.md P2-1 and README → Execution worker), or use a fingerprint " +
+      "provider (gpm/genlogin), or keep DRY_RUN=true."
+  );
 }
