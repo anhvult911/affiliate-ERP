@@ -238,14 +238,31 @@ the digest with per-task buttons, an `approve:<id>` callback moved the task to
 `queued` with a fresh Sub_ID, `reject:<id>` set `review_note`, and both the
 capture and failure notifiers produced the expected payloads.
 
+## Secrets in this repository
+
+Nothing in this repo may contain a real credential: the pre-commit hook blocks
+account exports (`uid|password|2FA|proxy`), TOTP secrets, authenticated proxies,
+Google/Telegram tokens and Supabase JWTs.
+
+```bash
+pnpm hooks:install     # once per clone: writes .git/hooks/pre-commit
+pnpm check:secrets     # scan everything, e.g. in CI
+```
+
+A finding can be waived with an inline `secret-scan:allow` marker when the value is
+genuinely documentation (published test vectors, the base32 alphabet).
+
 ## Importing accounts
 
 `/accounts` → **Nhập account** takes the Facebook export, one line per account:
 
 ```
 uid|password|2FA-secret|proxy
-61590750336672|vuongkaitlin25l|GDS7FIVALRCIHH7Y7Y62FNOOUVLT37B5|103.166.184.92:16008:hma27:hma27
+00000000000000|matkhau|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|127.0.0.1:8080
 ```
+
+The values above are a fixture. Never paste a real export into the repository — the
+pre-commit hook (`pnpm check:secrets`) blocks the commit.
 
 The proxy field is optional and may be `host:port` or `host:port:user:pass`.
 Passwords, TOTP secrets and proxy passwords are encrypted with AES-256-GCM before
@@ -302,6 +319,52 @@ Money and percentages are parsed separately on purpose: `890.000đ` is 890,000 (
 890) while `12,5` in the commission column is 12.5%. Duplicates — by affiliate link or
 Shopee item id, whether already in the database or earlier in the same file — are
 reported per row and skipped, so pasting the same export twice is harmless.
+
+## Shopee Affiliate API (optional)
+
+Products have two ingestion paths: **Nhập CSV** (works today) and, once Shopee grants
+API access, a direct sync. The API is the *publisher* GraphQL endpoint
+(`open-api.affiliate.shopee.vn/graphql`) — not the seller Open Platform.
+
+```bash
+SHOPEE_AFFILIATE_APP_ID="..."
+SHOPEE_AFFILIATE_APP_SECRET="..."
+```
+
+App ID and Secret are in the affiliate dashboard → **Open API**. Access must be
+requested and approved first; until it is, every call returns
+`10035 You currently do not have access to the Shopee Affiliate Open API Platform`.
+Requests are signed statelessly (`SHA256(appId + timestamp + body + secret)`), so
+there is no token to refresh and no rotation flow — losing the secret means asking
+Shopee for a new one.
+
+The secret is read from the environment only: it is never logged, never included in
+Telegram alerts and never written to the database. `describeShopeeConfig()` is the
+only shape allowed in logs.
+
+### Scheduled jobs
+
+| Job | Route | Every | Why |
+|---|---|---|---|
+| conversions | `/api/cron/shopee/conversions` | 60 min | reports lag behind the sale; hourly keeps attribution tight without polling harder than the unpublished limit allows |
+| products | `/api/cron/shopee/products` | 6 h | offer catalogues change slowly |
+| validated | `/api/cron/shopee/validated` | 24 h | Shopee settles billing daily |
+
+Every job runs with a hard **request budget per run** (`SHOPEE_MAX_REQUESTS_PER_RUN`,
+further capped per job) so a failing page cannot turn the schedule into a hot loop. A
+run that hits the budget stops and the next tick continues from the watermark.
+
+The three Shopee routes are registered in `vercel.json` together with their
+implementation (T-SHOPEE-04/07/08, credential-gated); the schedule above is the
+contract they must honour. Existing jobs `/api/cron/health` and `/api/cron/reconcile`
+are already scheduled.
+
+### Products columns
+
+The sync writes `origin_link` (the plain product URL used to mint short links),
+`sync_source` (`csv` / `api`) and `last_synced_at`, plus optional offer metadata
+(`shop_id`, `image_url`, `sales`, `rating_star`, commission split, offer window).
+CSV rows keep `sync_source = 'csv'` and are never touched by the sync.
 
 ## Order reconciliation
 
@@ -372,9 +435,16 @@ DRY_RUN=false EXECUTOR=fixture pnpm worker:once    # full path against a local t
 DRY_RUN=false ANTIDETECT_PROVIDER=gpm pnpm worker:dev
 ```
 
-Safety: `DRY_RUN` defaults to `true`, and the worker refuses to post for real with
-`ANTIDETECT_PROVIDER=local`. It also checks the account's proxy is reachable
-before launching, because a dead proxy makes Chromium fall back to the host IP.
+Safety: `DRY_RUN` defaults to `true`. A real post with `ANTIDETECT_PROVIDER=local` is
+refused unless `ALLOW_LOCAL_POSTING=true` is set — that provider has no fingerprint
+masking, so every account on the machine shares one fingerprint. The worker also checks
+the account's proxy is reachable before launching, because a dead proxy makes Chromium
+fall back to the host IP.
+
+```bash
+# real posting on the operator's own Chrome is an explicit decision
+DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:once
+```
 
 ## Verifying the schema without a database server
 
