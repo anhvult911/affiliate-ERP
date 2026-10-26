@@ -4,7 +4,10 @@ import { decodeBase32 } from "@/lib/accounts/totp";
  * Parser for the operator's Facebook export, one account per line:
  *
  *   uid|password|2FA-secret|proxy
- *   61590750336672|vuongkaitlin25l|GDS7FIVALRCIHH7Y7Y62FNOOUVLT37B5|103.166.184.92:16008:hma27:hma27
+ *   00000000000000|matkhau|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|127.0.0.1:8080
+ *
+ * (Fixture values. A real export must never reach the repository — see
+ * docs/REVIEW.md P0-1 and `pnpm check:secrets`.)
  *
  * The proxy may be `host:port` (no auth) or `host:port:user:pass`. The 2FA field is
  * the secret behind https://2fa.live — base32, so it can be turned into a 6-digit

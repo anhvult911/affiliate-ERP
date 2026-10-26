@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 
 import { WorkerApi, type ClaimedAccount, type ClaimedTask, type ScanAccount, type TaskReport, type WarmingReport, type WarmingSlot } from "./api.js";
-import { loadConfig, type WorkerConfig } from "./config.js";
+import { loadConfig, shouldClaimTasks, type WorkerConfig } from "./config.js";
 import { resolveTarget, runCommentFlow, type CommentTarget } from "./execution/index.js";
 import { resolveWarmingTarget, runWarmingSlot, type WarmingOutcome } from "./execution/warming.js";
 import { resolveProfileTarget, runProfileSetup } from "./execution/profile-setup.js";
@@ -94,11 +94,22 @@ async function main(): Promise<void> {
   // empty queue.
   const stopHeartbeat = startHeartbeat(deps.api, config, logger);
 
+  // Decided once, not per loop iteration: this is an operating mode, and logging it
+  // every poll would bury the interesting lines.
+  const claimsTasks = shouldClaimTasks(config);
+  if (!claimsTasks) {
+    logger.warn("not claiming tasks", {
+      reason: config.warmingOnly
+        ? "warming-only run"
+        : "dry run with the fixture executor (set DRY_RUN_CLAIMS=true to exercise the queue)"
+    });
+  }
+
   try {
     do {
       let didWork = false;
 
-      if (!config.warmingOnly) {
+      if (claimsTasks) {
         const tasks = await claimTasks(deps);
 
         if (tasks.length === 0) {

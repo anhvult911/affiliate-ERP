@@ -244,11 +244,15 @@ export class WorkerApi {
   }
 
   /** Marks a source scanned so an empty or fully-duplicated scan still advances. */
-  async radarScanned(sourceId: string, postsSeen: number): Promise<void> {
-    await this.request<{ ok: boolean }>("/api/worker/radar/scanned", {
-      method: "POST",
-      body: JSON.stringify({ sourceId, postsSeen })
-    });
+  async radarScanned(
+    sourceId: string,
+    postsSeen: number,
+    accountId: string
+  ): Promise<{ emptyStreak: number; alerted: boolean } | null> {
+    return this.request<{ ok: boolean; emptyStreak: number; alerted: boolean }>(
+      "/api/worker/radar/scanned",
+      { method: "POST", body: JSON.stringify({ sourceId, postsSeen, accountId }) }
+    );
   }
 
   /** Registers this process with the app so /api/cron/health can notice it stopping. */
