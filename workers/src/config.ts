@@ -61,6 +61,8 @@ export type WorkerConfig = {
    * every start so it can never become an accident.
    */
   ignoreProxy: boolean;
+  /** Set by DRY_RUN_CLAIMS=true: let a fixture dry-run claim real queue rows. */
+  dryRunClaims: boolean;
 };
 
 const DEFAULTS = {
@@ -121,6 +123,28 @@ function hasFlag(name: string): boolean {
   return process.argv.slice(2).includes(`--${name}`);
 }
 
+/**
+ * Whether this run may claim real queue rows (docs/REVIEW.md P2-5).
+ *
+ * A fixture dry-run claims a task, types into a local page, then reports `failed` with
+ * "Dry run: nothing was posted" — which moves a real task to failed, spends one of its
+ * three attempts and sends a failure alert. Nothing about that is a rehearsal.
+ *
+ * A dry-run against the *real* executor is different: it is the documented way to check
+ * profiles, proxies and selectors, and touching the queue is the point. So only the
+ * fixture combination is blocked, and DRY_RUN_CLAIMS=true opens it back up.
+ */
+export function shouldClaimTasks(config: {
+  dryRun: boolean;
+  executor: ExecutorName;
+  warmingOnly: boolean;
+  dryRunClaims: boolean;
+}): boolean {
+  if (config.warmingOnly) return false;
+  if (config.dryRun && config.executor === "fixture" && !config.dryRunClaims) return false;
+  return true;
+}
+
 export function loadConfig(): WorkerConfig {
   const executorOverride = readFlag("executor");
   const dryRunOverride = readFlag("dry-run");
@@ -154,6 +178,7 @@ export function loadConfig(): WorkerConfig {
     radarPinnedProductId: process.env.RADAR_PINNED_PRODUCT_ID?.trim() || null,
     randomSeed: process.env.RANDOM_SEED ? readNumber("RANDOM_SEED", 1) : null,
     ignoreProxy: hasFlag("no-proxy") || readBoolean("IGNORE_PROXY", false),
+    dryRunClaims: readBoolean("DRY_RUN_CLAIMS", false),
     allowLocalPosting: readBoolean("ALLOW_LOCAL_POSTING", false)
   };
 
