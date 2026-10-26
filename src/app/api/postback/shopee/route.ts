@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CONVERSION_STATUSES } from "@/lib/constants";
 import { applyConversion, reconcileAfterIngest } from "@/lib/shopee/conversions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { readPostbackBody } from "@/lib/worker/postback-body";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 
 export const dynamic = "force-dynamic";
@@ -33,12 +34,12 @@ export async function POST(request: Request) {
   const auth = authorizeWorker(request);
   if (!auth.ok) return auth.response;
 
-  const contentType = request.headers.get("content-type") ?? "";
-  const rawBody = contentType.includes("application/json")
-    ? await request.json().catch(() => null)
-    : Object.fromEntries((await request.formData().catch(() => new FormData())).entries());
+  const incoming = await readPostbackBody(request);
+  if (!incoming.ok) {
+    return workerJson({ ok: false, error: incoming.error }, incoming.status);
+  }
 
-  const parsed = postbackSchema.safeParse(rawBody);
+  const parsed = postbackSchema.safeParse(incoming.body);
   if (!parsed.success) {
     return workerJson({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid postback." }, 400);
   }
