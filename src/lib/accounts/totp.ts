@@ -7,7 +7,7 @@ import { createHmac } from "node:crypto";
  * website: the secret is the input, the code is arithmetic.
  */
 
-const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; // secret-scan:allow (alphabet, not a secret)
 
 export const TOTP_PERIOD_SECONDS = 30;
 export const TOTP_DIGITS = 6;

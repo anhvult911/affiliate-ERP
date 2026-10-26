@@ -238,14 +238,31 @@ the digest with per-task buttons, an `approve:<id>` callback moved the task to
 `queued` with a fresh Sub_ID, `reject:<id>` set `review_note`, and both the
 capture and failure notifiers produced the expected payloads.
 
+## Secrets in this repository
+
+Nothing in this repo may contain a real credential: the pre-commit hook blocks
+account exports (`uid|password|2FA|proxy`), TOTP secrets, authenticated proxies,
+Google/Telegram tokens and Supabase JWTs.
+
+```bash
+pnpm hooks:install     # once per clone: writes .git/hooks/pre-commit
+pnpm check:secrets     # scan everything, e.g. in CI
+```
+
+A finding can be waived with an inline `secret-scan:allow` marker when the value is
+genuinely documentation (published test vectors, the base32 alphabet).
+
 ## Importing accounts
 
 `/accounts` → **Nhập account** takes the Facebook export, one line per account:
 
 ```
 uid|password|2FA-secret|proxy
-61590750336672|vuongkaitlin25l|GDS7FIVALRCIHH7Y7Y62FNOOUVLT37B5|103.166.184.92:16008:hma27:hma27
+00000000000000|matkhau|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|127.0.0.1:8080
 ```
+
+The values above are a fixture. Never paste a real export into the repository — the
+pre-commit hook (`pnpm check:secrets`) blocks the commit.
 
 The proxy field is optional and may be `host:port` or `host:port:user:pass`.
 Passwords, TOTP secrets and proxy passwords are encrypted with AES-256-GCM before
@@ -418,9 +435,16 @@ DRY_RUN=false EXECUTOR=fixture pnpm worker:once    # full path against a local t
 DRY_RUN=false ANTIDETECT_PROVIDER=gpm pnpm worker:dev
 ```
 
-Safety: `DRY_RUN` defaults to `true`, and the worker refuses to post for real with
-`ANTIDETECT_PROVIDER=local`. It also checks the account's proxy is reachable
-before launching, because a dead proxy makes Chromium fall back to the host IP.
+Safety: `DRY_RUN` defaults to `true`. A real post with `ANTIDETECT_PROVIDER=local` is
+refused unless `ALLOW_LOCAL_POSTING=true` is set — that provider has no fingerprint
+masking, so every account on the machine shares one fingerprint. The worker also checks
+the account's proxy is reachable before launching, because a dead proxy makes Chromium
+fall back to the host IP.
+
+```bash
+# real posting on the operator's own Chrome is an explicit decision
+DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:once
+```
 
 ## Verifying the schema without a database server
 
