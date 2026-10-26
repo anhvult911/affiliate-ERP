@@ -449,7 +449,7 @@ DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:onc
 ## Verifying the schema without a database server
 
 ```bash
-pnpm verify:schema     # 26 assertions, ~3s, no Docker, no network
+pnpm verify:schema     # 46 assertions, ~3s, no Docker, no network
 ```
 
 Runs `supabase/migrations/*` and `supabase/seed.sql` against a real Postgres
