@@ -446,6 +446,29 @@ fall back to the host IP.
 DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:once
 ```
 
+## Deploy to VPS
+
+The app and the worker deploy separately: Vercel (or any Node host) runs Next.js, the
+VPS runs the worker because it needs Chrome, a display and persistent profiles.
+
+```bash
+# on the VPS, in the repository root
+cp .env.example .env.production        # fill in the real values (never commit it)
+docker compose -f docker-compose.prod.yml config    # validates before anything starts
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs -f worker
+docker compose -f docker-compose.prod.yml restart worker     # after an env change
+```
+
+What the compose file gives you: `restart: unless-stopped`, a healthcheck against the
+worker's own `GET /health` (it answers `{ok, version}` without touching the app), named
+volumes for profiles/evidence/logs, and log rotation. The profiles volume is the one that
+matters: it holds the logged-in browser sessions, so losing it means logging every
+account in again — the exact pattern that gets accounts flagged.
+
+One worker per account at a time: the claim RPC is atomic, so running two workers is safe
+for the queue but pointless on a single machine (both would fight for the same profiles).
+
 ## Verifying the schema without a database server
 
 ```bash

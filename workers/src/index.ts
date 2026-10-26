@@ -8,6 +8,7 @@ import { resolveProfileTarget, runProfileSetup } from "./execution/profile-setup
 import { startFixtureServer, type FixtureServer } from "./fixture-server.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { createRng, sleep, type Rng } from "./humanize.js";
+import { startHealthServer } from "./health.js";
 import { createLogger, type Logger } from "./logger.js";
 import { assertProxyReachable } from "./proxy-check.js";
 import { firstPage, launchBrowser, resolveProvider, type AntidetectProvider } from "./providers/index.js";
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger({
     worker: config.workerName,
+    version: config.workerVersion,
     dryRun: config.dryRun,
     provider: config.provider,
     executor: config.executor
@@ -92,6 +94,18 @@ async function main(): Promise<void> {
   // Registered before the first claim so /api/cron/health knows this process
   // exists; a worker that dies is then detected by the missing beat, not by an
   // empty queue.
+  // Liveness for the container runtime; independent of the app being reachable.
+  const health = await startHealthServer({
+    port: config.healthPort,
+    version: config.workerVersion,
+    logger
+  }).catch((error: unknown) => {
+    logger.warn("health endpoint failed to start", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  });
+
   const stopHeartbeat = startHeartbeat(deps.api, config, logger);
 
   // Decided once, not per loop iteration: this is an operating mode, and logging it
@@ -140,6 +154,7 @@ async function main(): Promise<void> {
     } while (running);
   } finally {
     stopHeartbeat();
+    await health?.close();
     await fixture?.stop();
   }
 

@@ -1,0 +1,49 @@
+# Production runtime for the execution worker.
+#
+#   cp .env.example .env.production      # then fill in the real values
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f worker
+#
+# The app itself (Next.js) is deployed separately — Vercel or any Node host. This file
+# only runs the process that drives browsers, because that one needs Chrome, a display
+# and persistent profiles, which a serverless platform cannot provide.
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    image: affiliate-worker:prod
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    # Headed Chromium plus a handful of accounts is memory-hungry; the limit keeps one
+    # runaway profile from taking the VPS down with it.
+    mem_limit: 2g
+    shm_size: 512m
+    init: true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${WORKER_HEALTH_PORT:-8080}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # Session state lives here. Losing this volume means every account has to log in
+      # again, which is exactly the pattern that gets accounts flagged.
+      - worker-profiles:/app/workers/.profiles
+      # Operator-supplied persona photos (avatar/cover), read-only.
+      - ./workers/assets:/app/workers/assets:ro
+      # Evidence screenshots for every executed action.
+      - worker-evidence:/app/workers/.evidence
+      - worker-logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  worker-profiles:
+  worker-evidence:
+  worker-logs:

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 /**
  * Worker configuration.
  *
@@ -45,6 +46,10 @@ export type WorkerConfig = {
   warmingOnly: boolean;
   /** How often the worker pings /api/worker/heartbeat. */
   heartbeatIntervalMs: number;
+  /** Port for the container liveness endpoint (GET /health); 0 disables it. */
+  healthPort: number;
+  /** Worker package version, reported by /health. */
+  workerVersion: string;
   /** Run the radar scan cycle (scrape watchlist sources, hand posts to ingest). */
   radarEnabled: boolean;
   /** Sources scanned per cycle. */
@@ -145,6 +150,22 @@ export function shouldClaimTasks(config: {
   return true;
 }
 
+/**
+ * Version reported by /health. Read from the package manifest so an image tag and the
+ * endpoint cannot disagree; WORKER_VERSION overrides it when the runtime image has no
+ * package.json (the Dockerfile copies one, but a stripped image might not).
+ */
+function readPackageVersion(): string {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      version?: string;
+    };
+    return manifest.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function loadConfig(): WorkerConfig {
   const executorOverride = readFlag("executor");
   const dryRunOverride = readFlag("dry-run");
@@ -173,6 +194,8 @@ export function loadConfig(): WorkerConfig {
     warmingEnabled: readBoolean("WARMING_ENABLED", false),
     warmingOnly: hasFlag("warming-only"),
     heartbeatIntervalMs: readNumber("HEARTBEAT_INTERVAL_MS", 60_000),
+    healthPort: readNumber("WORKER_HEALTH_PORT", 8080),
+    workerVersion: readString("WORKER_VERSION", readPackageVersion()),
     radarEnabled: readBoolean("RADAR_ENABLED", false),
     radarSourcesPerCycle: readNumber("RADAR_SOURCES_PER_CYCLE", 3),
     radarPinnedProductId: process.env.RADAR_PINNED_PRODUCT_ID?.trim() || null,

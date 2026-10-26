@@ -19,6 +19,7 @@ ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     NODE_ENV=production \
     BROWSER_CHANNEL="" \
+    WORKER_HEALTH_PORT=8080 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 RUN apt-get update \
@@ -41,6 +42,9 @@ RUN pnpm --filter affiliate-worker exec playwright install --with-deps chromium
 COPY workers ./workers
 
 WORKDIR /app/workers
+
+# Liveness endpoint (GET /health); the compose healthcheck probes it.
+EXPOSE 8080
 
 # Headed Chromium needs a display; Xvfb provides one without a physical monitor.
 # tini reaps zombie browser processes, of which there are many.
