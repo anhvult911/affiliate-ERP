@@ -10,7 +10,7 @@
 - [x] **P0-ROT-2** — ~~Purge history~~ **PM: bỏ qua**, theo P0-ROT-1 (tk test) — **PM**
 - [ ] **P0-ROT-3** — Xoay `TELEGRAM_WEBHOOK_SECRET` + xác nhận secret强度 sau khi repo public (REVIEW §3.7) — **PM**
 - [ ] **OPEN-Q** — Trả lời 8 open questions trong REVIEW.md §3 (đánh số 1–8) — **PM**
-  - [x] Q1 → **đã trả lời: tk test, chấp nhận public** (P0-ROT-1) / [ ] Q2 số worker? / Q3 tuổi task tối đa (đề xuất 7 ngày)? / Q4 quota Gemini?
+  - [x] Q1 → **đã trả lời: tk test, chấp nhận public** (P0-ROT-1) / [ ] Q2 số worker? / [x] Q3 → **PM duyệt đề xuất: 7 ngày** (2026-10-26) / [ ] Q4 quota Gemini?
   - [ ] Q5 local post thật có chủ đích? / Q6 Vercel plan vs ~1.440 heartbeat/ngày? / Q7 verify Telegram mức nào? / Q8 mức chấp nhận rủi ro ToS + số acc/cmd?
 - [ ] **SHOPEE-CRED** — Xin App ID/Secret Shopee Affiliate Open API (dashboard affiliate → Open API) — **PM** → mở khoá T-SHOPEE-04..08, 11
 
@@ -20,7 +20,7 @@
 - [ ] **P1-1** — `authorizeWorker` → constant-time compare (theo pattern `src/lib/cron/auth.ts`) — **OC** — AC: `auth.ts` không còn `!==` so token; test mới
 - [ ] **P1-2** — Sửa claim: tối đa 1 task/account/lần claim (`row_number() partition by assigned_account_id`) — **OC** — AC: verify-schema pass + test "một claim chỉ lấy 1 task/account"; vượt limit 7+25 phải fail test
 - [ ] **P1-3** — Radar: xoay vòng account quét (sắp theo `last_action_at`), ngân sách vòng quét/ngày, alert N vòng 0-post liên tiếp — **OC**
-- [ ] **P1-4** — TTL task `queued`: quá tuổi (N=7 ngày, chờ Q3) → `failed`/`last_error="stale post"`; hiện tuổi bài khi duyệt — **OC** *(chờ Q3)*
+- [ ] **P1-4** — TTL task `queued`: quá tuổi **N=7 ngày** (Q3 đã chốt) → `failed`/`last_error="stale post"`; hiện tuổi bài khi duyệt — **OC** *(CHẠY ĐƯỢC NGAY)*
 - [ ] **P1-5** — Cron dọn `running` quá lease + `attempt_count>=3` → `failed` + Telegram alert; tách "worker stale" khỏi "task stuck" — **OC**
 
 ## C. Shopee integration (OpenCode — spec trong SHOPEE_API.md)
@@ -67,4 +67,4 @@
 - [ ] **TEST-RUN-1** — Chạy 1 lần `pnpm test` + `pnpm verify:schema` trên máy có RAM đủ (PM máy Windows hoặc CI sau CI-1) rồi báo HR ghi nhận kết quả vào TASKS — **PM/OC**
 
 ---
-*Cập nhật lần cuối: 2026-10-26 (HR) — PM xác nhận credential trong README là TK TEST (P0-ROT-1/2 đóng, Q1 xong) → P0-1 và T-SHOPEE-01..03,05,09,10,12,13 CHẠY ĐƯỢC NGAY. Các ⛔ còn lại chờ Q2–Q8 + SHOPEE-CRED.*
+*Cập nhật lần cuối: 2026-10-26 (HR) — PM xác nhận TK test (Q1) + duyệt TTL 7 ngày (Q3) → P1-4 CHẠY ĐƯỢC NGAY. Vẫn chờ: Q2, Q4–Q8 + SHOPEE-CRED (mở T-SHOPEE-04/06/07/08/11/14).*
