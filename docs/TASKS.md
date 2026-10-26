@@ -57,8 +57,14 @@
 - [x] **DOC-1** — `docs/REVIEW.md` — HR — 2026-10-26
 - [x] **DOC-2** — `docs/SHOPEE_API.md` — HR — 2026-10-26
 - [x] **DOC-3** — `docs/COLLAB.md`, `docs/AGENTS.md`, `docs/TASKS.md` — HR — 2026-10-26
-- [ ] **DOC-4** — Review PR các task B & C khi OC gửi — HR
+- [x] **DOC-4** — Review 6 PR đầu (#2–#7) — HR — 2026-10-26 — **6/6 APPROVE (static)**, comments đã đăng lên từng PR; conditions: PR #6 stacked → merge #5 trước; P2 findings đã ghi trong comment (không chặn)
 - [ ] **DOC-5** — Cập nhật TASKS + spec sau khi PM trả lời OPEN-Q — HR
+- [ ] **DOC-6** — Review các PR kế tiếp (monitor cron lo khi model ổn định lại; nếu cron còn error → PM báo HR review tay) — HR
+
+## F. Hạ tầng (mới — HR đề xuất 2026-10-26)
+
+- [ ] **CI-1** — Thêm `.github/workflows`: `pnpm test` + `pnpm verify:schema` + `pnpm typecheck` trên mỗi PR — **OC** *(hiện repo KHÔNG có CI → merge = không ai chạy test; blocker gián tiếp cho mọi task B/C)*
+- [ ] **TEST-RUN-1** — Chạy 1 lần `pnpm test` + `pnpm verify:schema` trên máy có RAM đủ (PM máy Windows hoặc CI sau CI-1) rồi báo HR ghi nhận kết quả vào TASKS — **PM/OC**
 
 ---
 *Cập nhật lần cuối: 2026-10-26 (HR) — PM xác nhận credential trong README là TK TEST (P0-ROT-1/2 đóng, Q1 xong) → P0-1 và T-SHOPEE-01..03,05,09,10,12,13 CHẠY ĐƯỢC NGAY. Các ⛔ còn lại chờ Q2–Q8 + SHOPEE-CRED.*
