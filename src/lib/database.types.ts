@@ -49,6 +49,20 @@ isOneToOne: false
       referencedColumns: ["task_id"]
     }
                   ]
+                },"affiliate_sync_state": {
+                  Row: {
+                    "id": string,"kind": string,"last_error": string | null,"last_run_at": string | null,"locked_by": string | null,"locked_until": string | null,"updated_at": string,"watermark": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"kind": string,"last_error"?: string | null,"last_run_at"?: string | null,"locked_by"?: string | null,"locked_until"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                  }
+                  Update: {
+                    "id"?: string,"kind"?: string,"last_error"?: string | null,"last_run_at"?: string | null,"locked_by"?: string | null,"locked_until"?: string | null,"updated_at"?: string,"watermark"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"comment_tasks": {
                   Row: {
                     "ai_draft_comment": string | null,"approved_at": string | null,"assigned_account_id": string | null,"attempt_count": number,"claimed_at": string | null,"claimed_by": string | null,"created_at": string,"executed_at": string | null,"execution_mode": Database["public"]['Enums']["execution_mode"],"execution_note": string | null,"id": string,"last_error": string | null,"match_score": number | null,"matched_product_id": string | null,"post_content": string | null,"post_images": NonNullable<Json>,"post_url": string,"review_note": string | null,"secondary_account_id": string | null,"selected_review_image": string | null,"source_id": string | null,"status": Database["public"]['Enums']["task_status"],"sub_id_code": string | null,"updated_at": string
@@ -127,14 +141,14 @@ isOneToOne: false
                   ]
                 },"products": {
                   Row: {
-                    "affiliate_short_link": string,"commission_rate": number | null,"created_at": string,"embedding": string | null,"id": string,"is_active": boolean,"name": string,"niche": string | null,"price": number | null,"pros_cons_summary": string | null,"review_images": NonNullable<Json>,"shopee_item_id": string | null,"updated_at": string
+                    "affiliate_short_link": string,"commission_rate": number | null,"created_at": string,"embedding": string | null,"id": string,"image_url": string | null,"is_active": boolean,"last_synced_at": string | null,"name": string,"niche": string | null,"offer_period_end_at": string | null,"origin_link": string | null,"price": number | null,"pros_cons_summary": string | null,"rating_star": number | null,"review_images": NonNullable<Json>,"sales": number | null,"seller_commission_rate": number | null,"shop_id": string | null,"shop_name": string | null,"shopee_commission_rate": number | null,"shopee_item_id": string | null,"sync_source": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "affiliate_short_link": string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"is_active"?: boolean,"name": string,"niche"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"review_images"?: NonNullable<Json>,"shopee_item_id"?: string | null,"updated_at"?: string
+                    "affiliate_short_link": string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"image_url"?: string | null,"is_active"?: boolean,"last_synced_at"?: string | null,"name": string,"niche"?: string | null,"offer_period_end_at"?: string | null,"origin_link"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"rating_star"?: number | null,"review_images"?: NonNullable<Json>,"sales"?: number | null,"seller_commission_rate"?: number | null,"shop_id"?: string | null,"shop_name"?: string | null,"shopee_commission_rate"?: number | null,"shopee_item_id"?: string | null,"sync_source"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "affiliate_short_link"?: string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"is_active"?: boolean,"name"?: string,"niche"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"review_images"?: NonNullable<Json>,"shopee_item_id"?: string | null,"updated_at"?: string
+                    "affiliate_short_link"?: string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"image_url"?: string | null,"is_active"?: boolean,"last_synced_at"?: string | null,"name"?: string,"niche"?: string | null,"offer_period_end_at"?: string | null,"origin_link"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"rating_star"?: number | null,"review_images"?: NonNullable<Json>,"sales"?: number | null,"seller_commission_rate"?: number | null,"shop_id"?: string | null,"shop_name"?: string | null,"shopee_commission_rate"?: number | null,"shopee_item_id"?: string | null,"sync_source"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -310,6 +324,14 @@ isOneToOne: false
               "avg_trust": number,"status": Database["public"]['Enums']["account_status"],"total": number
             }[]
                            },
+"acquire_sync_lock":
+{ Args: { "p_kind": string,"p_owner": string,"p_ttl_seconds"?: number }; Returns: boolean
+                           },
+"advance_sync_watermark":
+{ Args: { "p_kind": string,"p_watermark": string }; Returns: {
+              "kind": string,"last_run_at": string,"watermark": string
+            }[]
+                           },
 "analytics_by_account":
 { Args: { "p_since"?: string }; Returns: {
               "commission": number,"label": string,"orders": number,"revenue": number
@@ -393,6 +415,12 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "attributed": number,"remaining": number
             }[]
+                           },
+"record_sync_error":
+{ Args: { "p_error": string,"p_kind": string }; Returns: undefined
+                           },
+"release_sync_lock":
+{ Args: { "p_kind": string,"p_owner": string }; Returns: undefined
                            },
 "scan_accounts":
 { Args: { "p_limit"?: number }; Returns: {

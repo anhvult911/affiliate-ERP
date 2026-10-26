@@ -342,6 +342,30 @@ The secret is read from the environment only: it is never logged, never included
 Telegram alerts and never written to the database. `describeShopeeConfig()` is the
 only shape allowed in logs.
 
+### Scheduled jobs
+
+| Job | Route | Every | Why |
+|---|---|---|---|
+| conversions | `/api/cron/shopee/conversions` | 60 min | reports lag behind the sale; hourly keeps attribution tight without polling harder than the unpublished limit allows |
+| products | `/api/cron/shopee/products` | 6 h | offer catalogues change slowly |
+| validated | `/api/cron/shopee/validated` | 24 h | Shopee settles billing daily |
+
+Every job runs with a hard **request budget per run** (`SHOPEE_MAX_REQUESTS_PER_RUN`,
+further capped per job) so a failing page cannot turn the schedule into a hot loop. A
+run that hits the budget stops and the next tick continues from the watermark.
+
+The three Shopee routes are registered in `vercel.json` together with their
+implementation (T-SHOPEE-04/07/08, credential-gated); the schedule above is the
+contract they must honour. Existing jobs `/api/cron/health` and `/api/cron/reconcile`
+are already scheduled.
+
+### Products columns
+
+The sync writes `origin_link` (the plain product URL used to mint short links),
+`sync_source` (`csv` / `api`) and `last_synced_at`, plus optional offer metadata
+(`shop_id`, `image_url`, `sales`, `rating_star`, commission split, offer window).
+CSV rows keep `sync_source = 'csv'` and are never touched by the sync.
+
 ## Order reconciliation
 
 Affiliate networks report an order the moment it happens, which can be before the task

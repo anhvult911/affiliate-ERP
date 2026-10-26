@@ -336,6 +336,14 @@ if (rolesAvailable) {
   record("authenticated cannot execute sweep_stuck_tasks", !(await canExecute("authenticated", "public.sweep_stuck_tasks(int)")));
   record("authenticated can execute the analytics RPCs", await canExecute("authenticated", "public.analytics_summary(timestamptz)"));
   record("authenticated keeps is_operator()", await canExecute("authenticated", "public.is_operator()"));
+  record("anon cannot execute advance_sync_watermark",
+    !(await canExecute("anon", "public.advance_sync_watermark(text,timestamptz)")));
+  record("authenticated cannot execute record_sync_error",
+    !(await canExecute("authenticated", "public.record_sync_error(text,text)")));
+  record("anon cannot execute acquire_sync_lock",
+    !(await canExecute("anon", "public.acquire_sync_lock(text,text,int)")));
+  record("authenticated cannot execute release_sync_lock",
+    !(await canExecute("authenticated", "public.release_sync_lock(text,text)")));
   record("anon cannot execute scan_accounts", !(await canExecute("anon", "public.scan_accounts(int)")));
   record("authenticated cannot execute scan_accounts", !(await canExecute("authenticated", "public.scan_accounts(int)")));
   record("service_role can execute scan_accounts", await canExecute("service_role", "public.scan_accounts(int)"));
@@ -344,6 +352,149 @@ if (rolesAvailable) {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
 
+/* ------------------------------------------ product sync columns (T-SHOPEE-05) */
+eq(
+  "offer-sync columns exist",
+  await rows(`select column_name from information_schema.columns
+               where table_schema = 'public' and table_name = 'products'
+                 and column_name in ('origin_link','shop_id','shop_name','image_url','sales',
+                                     'rating_star','seller_commission_rate','shopee_commission_rate',
+                                     'offer_period_end_at','sync_source','last_synced_at')
+               order by column_name`),
+  [
+    { column_name: "image_url" },
+    { column_name: "last_synced_at" },
+    { column_name: "offer_period_end_at" },
+    { column_name: "origin_link" },
+    { column_name: "rating_star" },
+    { column_name: "sales" },
+    { column_name: "seller_commission_rate" },
+    { column_name: "shop_id" },
+    { column_name: "shop_name" },
+    { column_name: "shopee_commission_rate" },
+    { column_name: "sync_source" }
+  ]
+);
+
+eq(
+  "existing rows default to sync_source = csv",
+  await scalar(`select count(*)::int from public.products where sync_source <> 'csv'`),
+  0
+);
+
+let duplicateLinkRejected = false;
+try {
+  await exec(`insert into public.products (name, affiliate_short_link)
+              select 'Duplicate link', affiliate_short_link from public.products limit 1`);
+} catch (error) {
+  duplicateLinkRejected = /products_affiliate_short_link_key/.test(String(error.message));
+}
+record("affiliate_short_link is unique (sync upsert depends on it)", duplicateLinkRejected);
+
+let badSyncSourceRejected = false;
+try {
+  await exec(`insert into public.products (name, affiliate_short_link, sync_source)
+              values ('Bad source', 'https://example.test/bad-source', 'manual')`);
+} catch (error) {
+  badSyncSourceRejected = /products_sync_source_check/.test(String(error.message));
+}
+record("sync_source only accepts csv or api", badSyncSourceRejected);
+
+/* ------------------------------------ sync state: resume watermark (T-SHOPEE-09) */
+eq(
+  "sync state starts empty",
+  await rows(`select count(*)::int as n from public.affiliate_sync_state`),
+  [{ n: 0 }]
+);
+
+eq(
+  "advancing a watermark creates the row",
+  await rows(`select kind, watermark is not null as has_watermark
+                from public.advance_sync_watermark('conversion', '2026-10-26T10:00:00Z')`),
+  [{ kind: "conversion", has_watermark: true }]
+);
+
+// A later run must be able to move the watermark forward...
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-26T12:00:00Z')`);
+eq(
+  "the watermark moves forward",
+  new Date(await scalar(`select watermark from public.affiliate_sync_state where kind = 'conversion'`)).toISOString(),
+  "2026-10-26T12:00:00.000Z"
+);
+
+// ...but a stale run must never rewind it.
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-25T09:00:00Z')`);
+eq(
+  "a stale run cannot rewind the watermark",
+  new Date(await scalar(`select watermark from public.affiliate_sync_state where kind = 'conversion'`)).toISOString(),
+  "2026-10-26T12:00:00.000Z"
+);
+
+await exec(`select public.record_sync_error('conversion', 'boom: 10030')`);
+eq(
+  "a failure records the reason without touching the watermark",
+  await rows(`select last_error, watermark is not null as has_watermark
+                from public.affiliate_sync_state where kind = 'conversion'`),
+  [{ last_error: "boom: 10030", has_watermark: true }]
+);
+
+await exec(`select public.advance_sync_watermark('conversion', '2026-10-26T13:00:00Z')`);
+eq(
+  "a successful advance clears the previous error",
+  await rows(`select last_error from public.affiliate_sync_state where kind = 'conversion'`),
+  [{ last_error: null }]
+);
+
+let badKindRejected = false;
+try {
+  await exec(`insert into public.affiliate_sync_state (kind) values ('unknown')`);
+} catch (error) {
+  badKindRejected = /affiliate_sync_state_kind_check/.test(String(error.message));
+}
+record("sync kind is constrained to the three jobs", badKindRejected);
+
+await exec(`delete from public.affiliate_sync_state`);
+
+/* ------------------------------- single-flight sync lock (T-SHOPEE-13) */
+eq(
+  "the lock is free at first",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-a', 60)`),
+  true
+);
+eq(
+  "a second caller cannot take a live lock",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-b', 60)`),
+  false
+);
+eq(
+  "the owner can release it",
+  await exec(`select public.release_sync_lock('product', 'cron-a')`).then(() =>
+    scalar(`select public.acquire_sync_lock('product', 'cron-b', 60)`)
+  ),
+  true
+);
+
+// A different owner must not release somebody else's lease.
+await exec(`select public.release_sync_lock('product', 'cron-a')`);
+eq(
+  "a non-owner cannot release the lease",
+  await scalar(`select locked_by from public.affiliate_sync_state where kind = 'product'`),
+  "cron-b"
+);
+
+// A crashed run leaves a lease behind; it must expire rather than block forever.
+await exec(`
+  update public.affiliate_sync_state
+     set locked_until = now() - interval '1 minute'
+   where kind = 'product'
+`);
+eq(
+  "an expired lease can be taken over",
+  await scalar(`select public.acquire_sync_lock('product', 'cron-c', 60)`),
+  true
+);
+
+await exec(`delete from public.affiliate_sync_state where kind = 'product'`);
 /* ------------------------------------------- stuck tasks are closed (P1-5) */
 // A task that dies three times between claim and report can never be claimed again
 // (attempt_count >= 3). Without the sweep it stays `running` forever while the queue
