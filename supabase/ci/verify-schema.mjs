@@ -338,6 +338,43 @@ if (rolesAvailable) {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
 
+/* --------------------------------------- radar negative cache (P2-4) */
+await exec(`
+  insert into public.radar_seen (post_url, source_id, score, reason)
+  values ('https://www.facebook.com/groups/seen/posts/1',
+          'aaaa1111-1111-4111-8111-111111111111', 0.412, 'below threshold')
+`);
+eq(
+  "a cached judgement stores its score",
+  await rows(`select score::float8 as score from public.radar_seen where post_url like '%/groups/seen/posts/1'`),
+  [{ score: 0.412 }]
+);
+
+// Re-judging the same post must refresh it, not duplicate it.
+await exec(`
+  insert into public.radar_seen (post_url, source_id, score, reason)
+  values ('https://www.facebook.com/groups/seen/posts/1',
+          'aaaa1111-1111-4111-8111-111111111111', 0.735, 're-judged')
+  on conflict (post_url) do update
+    set score = excluded.score, reason = excluded.reason, seen_at = now()
+`);
+eq(
+  "post_url is the cache key (one row per post)",
+  await rows(`select count(*)::int as n, max(score)::float8 as score
+                from public.radar_seen where post_url like '%/groups/seen/posts/1'`),
+  [{ n: 1, score: 0.735 }]
+);
+
+let badScoreRejected = false;
+try {
+  await exec(`insert into public.radar_seen (post_url, score) values ('https://x.test/1', 1.5)`);
+} catch (error) {
+  badScoreRejected = /radar_seen_score_check/.test(String(error.message));
+}
+record("a score outside 0..1 cannot be stored", badScoreRejected);
+
+await exec(`delete from public.radar_seen where post_url like '%/groups/seen/posts/%'`);
+
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
 // expressed relative to that baseline rather than assuming an empty table.
