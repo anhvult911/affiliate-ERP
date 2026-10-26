@@ -57,8 +57,30 @@
 - [x] **DOC-1** — `docs/REVIEW.md` — HR — 2026-10-26
 - [x] **DOC-2** — `docs/SHOPEE_API.md` — HR — 2026-10-26
 - [x] **DOC-3** — `docs/COLLAB.md`, `docs/AGENTS.md`, `docs/TASKS.md` — HR — 2026-10-26
-- [ ] **DOC-4** — Review PR các task B & C khi OC gửi — HR
+- [x] **DOC-4** — Review PR các task B & C khi OC gửi — HR — 2026-10-26 (24/24 PR review static + APPROVE)
 - [ ] **DOC-5** — Cập nhật TASKS + spec sau khi PM trả lời OPEN-Q — HR
 
+## 6.11 SESSION-2 CLOSE-OUT (2026-10-26, HR)
+
+**TẤT CẢ PR ĐÃ MERGE — 0 open PR, main CI xanh (full suite: typecheck + test + verify-schema).**
+
+Timeline merge cuối:
+- #15 CI-1, #16 P2-1, #17 P2-2
+- #2–#5, #7 (P0/P1/T-SHOPEE-01); stacked-base bug → auto-close 4 PR → recovery **#25 (P1-3)** + **#26 (full Shopee chain)** — cả 2 merged, inventory xác nhận đủ 7 file `src/lib/shopee/` + đủ migrations
+- **#27** hotfix: union-resolve cắt mất backtick đóng template ở verify-schema.mjs (line 602) → SyntaxError; fix 1 dòng
+- Batch 2: **#18 (P2-3), #19 (P2-5), #21 (P2-7), #20 (P2-6), #22 (P2-4), #23 (P2-8)**
+- **#24 (P2-9)** compose tay: postback route gộp `readPostbackBody` × `applyConversion` (auto-merge 2 hunk khác vùng, union verify-schema) — CI xanh 28s
+
+Ghi chú kỹ thuật cho lần sau (HR):
+1. **Union-resolve KHÔNG được cắt template literal** — đã xảy ra 2 lần (verify-schema line 602, config.ts mất phẩy line 182). Gate cứng: `node --check` + typecheck CI trước khi merge.
+2. Clone có refspec theo `main` → **fetch đúng nhánh PR** trước khi checkout/push.
+3. `gh pr checks` exit != 0 khi **pending** ≠ "no checks" — phân biệt rõ trước khi STOP.
+
+**Bước kế tiếp (PM + Orca):**
+- [ ] PM: `.env` local + credentials từ browser_vault (Supabase, Gemini, Shopee, Telegram) → chạy `npm run verify:schema` local với `--seed`
+- [ ] PM: cấu hình `target_sources` thật (groups/KOL/niche) cho radar
+- [ ] Orca: deploy workers lên VPS + đăng ký cron (30' sync, hourly reconcile, weekly review) — cần env `WORKER_SHARED_SECRET`/`TELEGRAM_BOT_TOKEN`
+- [ ] Demo end-to-end: sync → radar → generate → approval → comment → postback → report
+
 ---
-*Cập nhật lần cuối: 2026-10-26 (HR). PM chưa tick mục A → các task có ⛔/chờ vẫn đứng.*
+*Cập nhật lần cuối: 2026-10-26 (HR) — SESSION-2 CLOSE-OUT, mọi PR đã merge.*
