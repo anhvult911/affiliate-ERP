@@ -127,28 +127,66 @@ isOneToOne: false
                   ]
                 },"products": {
                   Row: {
-                    "affiliate_short_link": string,"commission_rate": number | null,"created_at": string,"embedding": string | null,"id": string,"is_active": boolean,"name": string,"niche": string | null,"price": number | null,"pros_cons_summary": string | null,"review_images": NonNullable<Json>,"shopee_item_id": string | null,"updated_at": string
+                    "affiliate_short_link": string,"commission_rate": number | null,"created_at": string,"embedding": string | null,"id": string,"image_url": string | null,"is_active": boolean,"last_synced_at": string | null,"name": string,"niche": string | null,"offer_period_end_at": string | null,"origin_link": string | null,"price": number | null,"pros_cons_summary": string | null,"rating_star": number | null,"review_images": NonNullable<Json>,"sales": number | null,"seller_commission_rate": number | null,"shop_id": string | null,"shop_name": string | null,"shopee_commission_rate": number | null,"shopee_item_id": string | null,"sync_source": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "affiliate_short_link": string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"is_active"?: boolean,"name": string,"niche"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"review_images"?: NonNullable<Json>,"shopee_item_id"?: string | null,"updated_at"?: string
+                    "affiliate_short_link": string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"image_url"?: string | null,"is_active"?: boolean,"last_synced_at"?: string | null,"name": string,"niche"?: string | null,"offer_period_end_at"?: string | null,"origin_link"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"rating_star"?: number | null,"review_images"?: NonNullable<Json>,"sales"?: number | null,"seller_commission_rate"?: number | null,"shop_id"?: string | null,"shop_name"?: string | null,"shopee_commission_rate"?: number | null,"shopee_item_id"?: string | null,"sync_source"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "affiliate_short_link"?: string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"is_active"?: boolean,"name"?: string,"niche"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"review_images"?: NonNullable<Json>,"shopee_item_id"?: string | null,"updated_at"?: string
+                    "affiliate_short_link"?: string,"commission_rate"?: number | null,"created_at"?: string,"embedding"?: string | null,"id"?: string,"image_url"?: string | null,"is_active"?: boolean,"last_synced_at"?: string | null,"name"?: string,"niche"?: string | null,"offer_period_end_at"?: string | null,"origin_link"?: string | null,"price"?: number | null,"pros_cons_summary"?: string | null,"rating_star"?: number | null,"review_images"?: NonNullable<Json>,"sales"?: number | null,"seller_commission_rate"?: number | null,"shop_id"?: string | null,"shop_name"?: string | null,"shopee_commission_rate"?: number | null,"shopee_item_id"?: string | null,"sync_source"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
-                },"social_accounts": {
+                },"radar_scans": {
                   Row: {
-                    "avatar_set_at": string | null,"bio": string | null,"bio_link_url": string | null,"browser_profile_id": string | null,"cooldown_until": string | null,"cover_set_at": string | null,"created_at": string,"credentials_imported_at": string | null,"daily_comment_limit": number,"daily_warming_limit": number,"id": string,"last_action_at": string | null,"last_warmed_at": string | null,"login_identifier": string | null,"login_password_enc": string | null,"min_action_gap_minutes": number,"name": string,"notes": string | null,"persona_schedule": NonNullable<Json>,"persona_type": string,"platform": Database["public"]['Enums']["social_platform"],"profile_built_at": string | null,"proxy_host": string | null,"proxy_ip": string | null,"proxy_password_enc": string | null,"proxy_port": number | null,"proxy_username": string | null,"status": Database["public"]['Enums']["account_status"],"trust_score": number,"twofa_secret_enc": string | null,"updated_at": string,"warmup_enabled": boolean
+                    "account_id": string,"created_at": string,"id": string,"posts_seen": number,"source_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "avatar_set_at"?: string | null,"bio"?: string | null,"bio_link_url"?: string | null,"browser_profile_id"?: string | null,"cooldown_until"?: string | null,"cover_set_at"?: string | null,"created_at"?: string,"credentials_imported_at"?: string | null,"daily_comment_limit"?: number,"daily_warming_limit"?: number,"id"?: string,"last_action_at"?: string | null,"last_warmed_at"?: string | null,"login_identifier"?: string | null,"login_password_enc"?: string | null,"min_action_gap_minutes"?: number,"name": string,"notes"?: string | null,"persona_schedule"?: NonNullable<Json>,"persona_type": string,"platform"?: Database["public"]['Enums']["social_platform"],"profile_built_at"?: string | null,"proxy_host"?: string | null,"proxy_ip"?: string | null,"proxy_password_enc"?: string | null,"proxy_port"?: number | null,"proxy_username"?: string | null,"status"?: Database["public"]['Enums']["account_status"],"trust_score"?: number,"twofa_secret_enc"?: string | null,"updated_at"?: string,"warmup_enabled"?: boolean
+                    "account_id": string,"created_at"?: string,"id"?: string,"posts_seen": number,"source_id"?: string | null
                   }
                   Update: {
-                    "avatar_set_at"?: string | null,"bio"?: string | null,"bio_link_url"?: string | null,"browser_profile_id"?: string | null,"cooldown_until"?: string | null,"cover_set_at"?: string | null,"created_at"?: string,"credentials_imported_at"?: string | null,"daily_comment_limit"?: number,"daily_warming_limit"?: number,"id"?: string,"last_action_at"?: string | null,"last_warmed_at"?: string | null,"login_identifier"?: string | null,"login_password_enc"?: string | null,"min_action_gap_minutes"?: number,"name"?: string,"notes"?: string | null,"persona_schedule"?: NonNullable<Json>,"persona_type"?: string,"platform"?: Database["public"]['Enums']["social_platform"],"profile_built_at"?: string | null,"proxy_host"?: string | null,"proxy_ip"?: string | null,"proxy_password_enc"?: string | null,"proxy_port"?: number | null,"proxy_username"?: string | null,"status"?: Database["public"]['Enums']["account_status"],"trust_score"?: number,"twofa_secret_enc"?: string | null,"updated_at"?: string,"warmup_enabled"?: boolean
+                    "account_id"?: string,"created_at"?: string,"id"?: string,"posts_seen"?: number,"source_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "radar_scans_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "social_accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "radar_scans_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "v_account_daily_usage"
+      referencedColumns: ["account_id"]
+    },{
+      foreignKeyName: "radar_scans_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "v_account_performance"
+      referencedColumns: ["account_id"]
+    },{
+      foreignKeyName: "radar_scans_source_id_fkey"
+      columns: ["source_id"]
+isOneToOne: false
+      referencedRelation: "target_sources"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"social_accounts": {
+                  Row: {
+                    "avatar_set_at": string | null,"bio": string | null,"bio_link_url": string | null,"browser_profile_id": string | null,"cooldown_until": string | null,"cover_set_at": string | null,"created_at": string,"credentials_imported_at": string | null,"daily_comment_limit": number,"daily_scan_limit": number,"daily_warming_limit": number,"id": string,"last_action_at": string | null,"last_scanned_at": string | null,"last_warmed_at": string | null,"login_identifier": string | null,"login_password_enc": string | null,"min_action_gap_minutes": number,"name": string,"notes": string | null,"persona_schedule": NonNullable<Json>,"persona_type": string,"platform": Database["public"]['Enums']["social_platform"],"profile_built_at": string | null,"proxy_host": string | null,"proxy_ip": string | null,"proxy_password_enc": string | null,"proxy_port": number | null,"proxy_username": string | null,"status": Database["public"]['Enums']["account_status"],"trust_score": number,"twofa_secret_enc": string | null,"updated_at": string,"warmup_enabled": boolean
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "avatar_set_at"?: string | null,"bio"?: string | null,"bio_link_url"?: string | null,"browser_profile_id"?: string | null,"cooldown_until"?: string | null,"cover_set_at"?: string | null,"created_at"?: string,"credentials_imported_at"?: string | null,"daily_comment_limit"?: number,"daily_scan_limit"?: number,"daily_warming_limit"?: number,"id"?: string,"last_action_at"?: string | null,"last_scanned_at"?: string | null,"last_warmed_at"?: string | null,"login_identifier"?: string | null,"login_password_enc"?: string | null,"min_action_gap_minutes"?: number,"name": string,"notes"?: string | null,"persona_schedule"?: NonNullable<Json>,"persona_type": string,"platform"?: Database["public"]['Enums']["social_platform"],"profile_built_at"?: string | null,"proxy_host"?: string | null,"proxy_ip"?: string | null,"proxy_password_enc"?: string | null,"proxy_port"?: number | null,"proxy_username"?: string | null,"status"?: Database["public"]['Enums']["account_status"],"trust_score"?: number,"twofa_secret_enc"?: string | null,"updated_at"?: string,"warmup_enabled"?: boolean
+                  }
+                  Update: {
+                    "avatar_set_at"?: string | null,"bio"?: string | null,"bio_link_url"?: string | null,"browser_profile_id"?: string | null,"cooldown_until"?: string | null,"cover_set_at"?: string | null,"created_at"?: string,"credentials_imported_at"?: string | null,"daily_comment_limit"?: number,"daily_scan_limit"?: number,"daily_warming_limit"?: number,"id"?: string,"last_action_at"?: string | null,"last_scanned_at"?: string | null,"last_warmed_at"?: string | null,"login_identifier"?: string | null,"login_password_enc"?: string | null,"min_action_gap_minutes"?: number,"name"?: string,"notes"?: string | null,"persona_schedule"?: NonNullable<Json>,"persona_type"?: string,"platform"?: Database["public"]['Enums']["social_platform"],"profile_built_at"?: string | null,"proxy_host"?: string | null,"proxy_ip"?: string | null,"proxy_password_enc"?: string | null,"proxy_port"?: number | null,"proxy_username"?: string | null,"status"?: Database["public"]['Enums']["account_status"],"trust_score"?: number,"twofa_secret_enc"?: string | null,"updated_at"?: string,"warmup_enabled"?: boolean
                   }
                   Relationships: [
                     
@@ -348,9 +386,22 @@ isOneToOne: false
               "status": Database["public"]['Enums']["task_status"],"total": number
             }[]
                            },
+"radar_empty_streak":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "reconcile_conversions":
 { Args: Record<PropertyKey, never>; Returns: {
               "attributed": number,"remaining": number
+            }[]
+                           },
+"scan_accounts":
+{ Args: { "p_limit"?: number }; Returns: {
+              "browser_profile_id": string,"id": string,"name": string,"proxy_ip": string,"scans_24h": number,"trust_score": number
+            }[]
+                           },
+"sweep_stuck_tasks":
+{ Args: { "p_lease_minutes"?: number }; Returns: {
+              "account_id": string,"attempt_count": number,"post_url": string,"task_id": string
             }[]
                            }
           }

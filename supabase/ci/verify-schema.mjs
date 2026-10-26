@@ -338,6 +338,54 @@ if (rolesAvailable) {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
 
+/* ------------------------------------------ product sync columns (T-SHOPEE-05) */
+eq(
+  "offer-sync columns exist",
+  await rows(`select column_name from information_schema.columns
+               where table_schema = 'public' and table_name = 'products'
+                 and column_name in ('origin_link','shop_id','shop_name','image_url','sales',
+                                     'rating_star','seller_commission_rate','shopee_commission_rate',
+                                     'offer_period_end_at','sync_source','last_synced_at')
+               order by column_name`),
+  [
+    { column_name: "image_url" },
+    { column_name: "last_synced_at" },
+    { column_name: "offer_period_end_at" },
+    { column_name: "origin_link" },
+    { column_name: "rating_star" },
+    { column_name: "sales" },
+    { column_name: "seller_commission_rate" },
+    { column_name: "shop_id" },
+    { column_name: "shop_name" },
+    { column_name: "shopee_commission_rate" },
+    { column_name: "sync_source" }
+  ]
+);
+
+eq(
+  "existing rows default to sync_source = csv",
+  await scalar(`select count(*)::int from public.products where sync_source <> 'csv'`),
+  0
+);
+
+let duplicateLinkRejected = false;
+try {
+  await exec(`insert into public.products (name, affiliate_short_link)
+              select 'Duplicate link', affiliate_short_link from public.products limit 1`);
+} catch (error) {
+  duplicateLinkRejected = /products_affiliate_short_link_key/.test(String(error.message));
+}
+record("affiliate_short_link is unique (sync upsert depends on it)", duplicateLinkRejected);
+
+let badSyncSourceRejected = false;
+try {
+  await exec(`insert into public.products (name, affiliate_short_link, sync_source)
+              values ('Bad source', 'https://example.test/bad-source', 'manual')`);
+} catch (error) {
+  badSyncSourceRejected = /products_sync_source_check/.test(String(error.message));
+}
+record("sync_source only accepts csv or api", badSyncSourceRejected);
+
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
 // expressed relative to that baseline rather than assuming an empty table.

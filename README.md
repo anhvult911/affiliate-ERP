@@ -325,6 +325,13 @@ The secret is read from the environment only: it is never logged, never included
 Telegram alerts and never written to the database. `describeShopeeConfig()` is the
 only shape allowed in logs.
 
+### Products columns
+
+The sync writes `origin_link` (the plain product URL used to mint short links),
+`sync_source` (`csv` / `api`) and `last_synced_at`, plus optional offer metadata
+(`shop_id`, `image_url`, `sales`, `rating_star`, commission split, offer window).
+CSV rows keep `sync_source = 'csv'` and are never touched by the sync.
+
 ## Order reconciliation
 
 Affiliate networks report an order the moment it happens, which can be before the task
