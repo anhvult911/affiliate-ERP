@@ -338,6 +338,61 @@ if (rolesAvailable) {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
 
+/* --------------------------------------------------- RLS contract (P2-9) */
+// The behaviour rls_check.sql proves on a Docker stack, reduced to what PGlite can run:
+// a signed-in user who is not in public.operators reads nothing and cannot write, an
+// operator reads everything, and the worker RPCs stay service-role only.
+if (rolesAvailable) {
+  await exec(`
+    insert into auth.users (id, email)
+    values
+      ('99999999-9999-4999-8999-999999999991', 'operator@example.com'),
+      ('88888888-8888-4888-8888-888888888881', 'intruder@example.com')
+    on conflict (id) do nothing;
+
+    insert into public.operators (user_id, email)
+    values ('99999999-9999-4999-8999-999999999991', 'operator@example.com')
+    on conflict (user_id) do nothing;
+  `);
+
+  const totalTasks = await scalar(`select count(*)::int from public.comment_tasks`);
+
+  // Supabase grants table access to `authenticated` by default; RLS is the filter.
+  // Without these grants the test would prove the wrong thing ("permission denied").
+  await exec(`
+    grant usage on schema public to authenticated;
+    grant select, insert, update, delete on all tables in schema public to authenticated;
+  `);
+
+  await exec(`
+    set role authenticated;
+    select set_config('request.jwt.claim.sub', '88888888-8888-4888-8888-888888888881', false);
+  `);
+
+  eq("a non-operator reads no tasks", await scalar(`select count(*)::int from public.comment_tasks`), 0);
+  eq("a non-operator reads no accounts", await scalar(`select count(*)::int from public.social_accounts`), 0);
+  eq("a non-operator reads no analytics rows", await scalar(`select count(*)::int from public.v_task_roi`), 0);
+
+  let writeRejected = false;
+  try {
+    await exec(`insert into public.comment_tasks (post_url, status)
+                values ('https://example.test/forbidden', 'pending_approval')`);
+  } catch (error) {
+    writeRejected = /row-level security|violates row-level/i.test(String(error.message));
+  }
+  record("a non-operator cannot insert a task", writeRejected);
+
+  await exec(`select set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999991', false)`);
+  eq(
+    "the operator reads every task",
+    await scalar(`select count(*)::int from public.comment_tasks`),
+    totalTasks
+  );
+
+  await exec(`reset role`);
+  await exec(`select set_config('request.jwt.claim.sub', '', false)`);
+}
+
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
 // expressed relative to that baseline rather than assuming an empty table.
