@@ -332,11 +332,109 @@ if (rolesAvailable) {
   record("authenticated cannot execute claim_comment_tasks", !(await canExecute("authenticated", "public.claim_comment_tasks(text,int)")));
   record("service_role can execute claim_comment_tasks", await canExecute("service_role", "public.claim_comment_tasks(text,int)"));
   record("anon cannot execute the analytics RPCs", !(await canExecute("anon", "public.analytics_summary(timestamptz)")));
+  record("anon cannot execute sweep_stuck_tasks", !(await canExecute("anon", "public.sweep_stuck_tasks(int)")));
+  record("authenticated cannot execute sweep_stuck_tasks", !(await canExecute("authenticated", "public.sweep_stuck_tasks(int)")));
   record("authenticated can execute the analytics RPCs", await canExecute("authenticated", "public.analytics_summary(timestamptz)"));
   record("authenticated keeps is_operator()", await canExecute("authenticated", "public.is_operator()"));
 } else {
   skipped.push("CREATE ROLE is unavailable in this engine — RPC grant assertions skipped");
 }
+
+/* ------------------------------------------- stuck tasks are closed (P1-5) */
+// A task that dies three times between claim and report can never be claimed again
+// (attempt_count >= 3). Without the sweep it stays `running` forever while the queue
+// advertises work nobody is doing.
+const STUCK_EXHAUSTED = "cccc4444-4444-4444-8444-444444444401";
+const STUCK_RETRYABLE = "cccc4444-4444-4444-8444-444444444402";
+const STUCK_FRESH = "cccc4444-4444-4444-8444-444444444403";
+
+await exec(`
+  insert into public.comment_tasks (id, status, assigned_account_id, matched_product_id, post_url,
+                                    claimed_at, claimed_by, attempt_count, created_at)
+  values
+    ('${STUCK_EXHAUSTED}', 'running', '${ACCOUNT}', 'bbbb1111-1111-4111-8111-111111111111',
+     'https://www.facebook.com/groups/stuck/posts/1', now() - interval '2 hours', 'dead-worker', 3, now() - interval '3 hours'),
+    ('${STUCK_RETRYABLE}', 'running', '${ACCOUNT}', 'bbbb1111-1111-4111-8111-111111111111',
+     'https://www.facebook.com/groups/stuck/posts/2', now() - interval '2 hours', 'dead-worker', 2, now() - interval '3 hours'),
+    ('${STUCK_FRESH}', 'running', '${ACCOUNT}', 'bbbb1111-1111-4111-8111-111111111111',
+     'https://www.facebook.com/groups/stuck/posts/3', now(), 'live-worker', 3, now())
+`);
+
+eq(
+  "sweep closes only the exhausted task",
+  await rows(`select task_id::text from public.sweep_stuck_tasks(15)`),
+  [{ task_id: STUCK_EXHAUSTED }]
+);
+
+eq(
+  "the swept task is failed with an explanation",
+  await rows(`select status::text, last_error from public.comment_tasks where id = '${STUCK_EXHAUSTED}'`),
+  [{ status: "failed", last_error: "lease exhausted: worker stopped reporting after 3 attempts" }]
+);
+
+eq(
+  "a task with retries left and a live lease are both untouched",
+  await rows(`select count(*)::int as n from public.comment_tasks
+               where id in ('${STUCK_RETRYABLE}', '${STUCK_FRESH}') and status = 'running'`),
+  [{ n: 2 }]
+);
+
+await exec(`delete from public.comment_tasks where post_url like '%/groups/stuck/posts/%'`);
+/* --------------------------------------- one task per account per claim (P1-2) */
+// Two accounts, two queued tasks each. A single claim must return at most one task
+// per account — before this, every queued row of an account passed the "budget
+// headroom" predicate against the same snapshot and the whole batch was taken.
+const CLAMP_ACCOUNTS = [
+  "11111111-1111-4111-8111-111111111111",
+  "44444444-4444-4444-8444-444444444444"
+];
+
+await exec(`
+  update public.social_accounts
+     set status = 'active', cooldown_until = null, last_action_at = null,
+         daily_comment_limit = 20, min_action_gap_minutes = 0
+   where id in ('${CLAMP_ACCOUNTS[0]}', '${CLAMP_ACCOUNTS[1]}')
+`);
+
+await exec(`
+  insert into public.comment_tasks (status, assigned_account_id, matched_product_id, post_url, created_at)
+  select 'queued', a.account_id, 'bbbb1111-1111-4111-8111-111111111111',
+         'https://www.facebook.com/groups/clamp/posts/' || a.account_id || '-' || g, now()
+    from (values
+      ('${CLAMP_ACCOUNTS[0]}'::uuid), ('${CLAMP_ACCOUNTS[1]}'::uuid)
+    ) as a(account_id)
+   cross join generate_series(1, 4) g
+`);
+
+const clampClaim = await rows(
+  `select assigned_account_id::text as account_id from public.claim_comment_tasks('clamp', 10)`
+);
+eq("a claim never returns two tasks for the same account", clampClaim.length, 2);
+eq(
+  "the single claim returns one task per account",
+  [...new Set(clampClaim.map((row) => row.account_id))].length,
+  2
+);
+
+// The account's budget still applies on the next call: with a limit of 1 and one
+// completed task already recorded, the account is out for the day.
+await exec(`
+  update public.comment_tasks
+     set status = 'completed', executed_at = now()
+   where assigned_account_id = '${CLAMP_ACCOUNTS[0]}'
+     and status = 'running'
+`);
+await exec(`update public.social_accounts set daily_comment_limit = 1 where id = '${CLAMP_ACCOUNTS[0]}'`);
+eq(
+  "the clamped account stops at its daily limit on the next claim",
+  (await rows(`select id from public.claim_comment_tasks('clamp-2', 10) where assigned_account_id = '${CLAMP_ACCOUNTS[0]}'`)).length,
+  0
+);
+
+await exec(`
+  delete from public.comment_tasks where post_url like '%/groups/clamp/posts/%';
+  update public.social_accounts set daily_comment_limit = 8 where id in ('${CLAMP_ACCOUNTS[0]}', '${CLAMP_ACCOUNTS[1]}')
+`);
 
 /* ------------------------------------------------- conversion reconciliation */
 // The seed already carries unattributed conversions, so every expectation below is
@@ -427,13 +525,13 @@ eq(
 );
 
 await exec(`insert into public.social_accounts (name, persona_type, login_identifier, proxy_port)
-            values ('Cred A', 'me_bim', '61590750336672', 16008)`);
+            values ('Cred A', 'me_bim', '00000000000001', 16008)`);
 record("credential import accepts a valid row", true);
 
 let duplicateRejected = false;
 try {
   await exec(`insert into public.social_accounts (name, persona_type, login_identifier)
-              values ('Cred A again', 'me_bim', '61590750336672')`);
+              values ('Cred A again', 'me_bim', '00000000000001')`);
 } catch (error) {
   duplicateRejected = /social_accounts_login_identifier_key/.test(String(error.message));
 }

@@ -352,6 +352,11 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "attributed": number,"remaining": number
             }[]
+                           },
+"sweep_stuck_tasks":
+{ Args: { "p_lease_minutes"?: number }; Returns: {
+              "account_id": string,"attempt_count": number,"post_url": string,"task_id": string
+            }[]
                            }
           }
           Enums: {

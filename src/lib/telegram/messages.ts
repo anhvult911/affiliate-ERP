@@ -217,6 +217,41 @@ export function buildWorkerSilentMessage(input: {
   };
 }
 
+/**
+ * A stuck task is a different failure from a silent worker: the process may be
+ * healthy and other tasks may flow, while one row stays "Đang chạy" because its
+ * three attempts were spent. Reporting them together is what made the old alert
+ * unactionable.
+ */
+export function buildStuckTasksMessage(input: {
+  swept: { taskId: string; accountId: string | null; attemptCount: number; postUrl: string | null }[];
+  remainingRunning: number;
+}): { text: string; keyboard: InlineKeyboard } {
+  const shown = input.swept.slice(0, 5);
+  const lines = [
+    "🩹 <b>Task kẹt đã được đóng</b>",
+    "",
+    `${input.swept.length} task ở trạng thái "đang chạy" đã hết 3 lần thử và bị chuyển sang thất bại:`,
+    ...shown.map(
+      (task) =>
+        `• <code>${escapeHtml(task.taskId.slice(0, 8))}</code> — ${task.attemptCount} lần · ${escapeHtml(
+          task.postUrl ?? "không có link"
+        )}`
+    ),
+    ...(input.swept.length > shown.length ? [`… và ${input.swept.length - shown.length} task khác`] : []),
+    "",
+    `Còn <b>${input.remainingRunning}</b> task đang chạy trong lease bình thường.`,
+    "Kiểm tra log worker: task thường chết vì profile bị đóng giữa phiên hoặc proxy rớt."
+  ];
+
+  return {
+    text: lines.join("\n"),
+    keyboard: {
+      inline_keyboard: [urlButton("📋 Mở hàng chờ", "/queue?status=failed")]
+    }
+  };
+}
+
 /** Failures and account-health events are the alerts that prevent silent losses. */
 export function buildFailureMessage(input: {
   taskId: string;
