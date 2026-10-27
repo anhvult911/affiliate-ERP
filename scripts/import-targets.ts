@@ -10,16 +10,10 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 
+import { loadScriptEnv, LOCAL_ENV_FILES } from "./lib/env";
+
 function loadEnvironment(): void {
-  for (const file of [".env.production", ".env.local", ".env"]) {
-    if (!existsSync(file)) continue;
-    try {
-      process.loadEnvFile(file);
-      return;
-    } catch {
-      continue;
-    }
-  }
+  loadScriptEnv(LOCAL_ENV_FILES);
 }
 
 async function main(): Promise<number> {

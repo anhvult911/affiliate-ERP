@@ -13,7 +13,8 @@
  *     nothing; the match path itself is covered by the fixture tests;
  *   - state from a previous run is deleted first, so running it twice is safe.
  */
-import { existsSync } from "node:fs";
+import { loadScriptEnv, LOCAL_ENV_FILES } from "./lib/env";
+import { cronAuthHeaders, workerAuthHeaders } from "./lib/tokens";
 
 type Supabase = ReturnType<typeof import("../src/lib/supabase/admin").createSupabaseAdminClient>;
 
@@ -24,14 +25,7 @@ const DEMO_ORDER_ID = "demo-e2e-order-1";
 const DEMO_LATE_ORDER_ID = "demo-e2e-order-late";
 
 function loadEnvironment(): void {
-  for (const file of [".env.local", ".env.production", ".env"]) {
-    if (!existsSync(file)) continue;
-    try {
-      process.loadEnvFile(file);
-    } catch {
-      /* a malformed file fails the checks below with a clearer message */
-    }
-  }
+  loadScriptEnv(LOCAL_ENV_FILES);
 }
 
 function step(label: string): void {
@@ -46,11 +40,8 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function workerHeaders(): Record<string, string> {
-  const token = process.env.WORKER_API_TOKEN?.trim();
-  if (!token) throw new Error("WORKER_API_TOKEN is required (the demo calls the worker routes in-process)");
-  return { "content-type": "application/json", authorization: `Bearer ${token}` };
-}
+// The demo calls two differently-gated route families, so it must send the matching
+// token: server-to-server helpers live in scripts/lib/tokens.ts.
 
 /** Removes only the rows this demo creates, so a second run starts from the same state. */
 async function resetDemoState(db: Supabase): Promise<void> {
@@ -159,7 +150,7 @@ async function main(): Promise<number> {
   const ingest = await ingestRoute.POST(
     new Request("http://localhost/api/worker/radar/ingest", {
       method: "POST",
-      headers: workerHeaders(),
+      headers: workerAuthHeaders(),
       body: JSON.stringify({
         sourceId,
         postUrl: DEMO_POST_URL,
@@ -246,7 +237,7 @@ async function main(): Promise<number> {
   const report = await reportRoute.POST(
     new Request(`http://localhost/api/worker/tasks/${taskId}/report`, {
       method: "POST",
-      headers: workerHeaders(),
+      headers: workerAuthHeaders(),
       body: JSON.stringify({
         status: "completed",
         worker: "demo-e2e",
@@ -281,7 +272,7 @@ async function main(): Promise<number> {
   const postback = await postbackRoute.POST(
     new Request("http://localhost/api/postback/shopee", {
       method: "POST",
-      headers: workerHeaders(),
+      headers: workerAuthHeaders(),
       body: JSON.stringify({
         sub_id: subId,
         order_id: DEMO_ORDER_ID,
@@ -308,7 +299,7 @@ async function main(): Promise<number> {
   assert(!lateError, `could not stage the late order: ${lateError?.message}`);
 
   const reconcile = await reconcileRoute.POST(
-    new Request("http://localhost/api/cron/reconcile", { method: "POST", headers: workerHeaders() })
+    new Request("http://localhost/api/cron/reconcile", { method: "POST", headers: cronAuthHeaders() })
   );
   const reconcileBody = (await reconcile.json()) as { ok: boolean; attributed: number; error?: string };
   assert(reconcileBody.ok, `reconcile failed: ${reconcileBody.error}`);
