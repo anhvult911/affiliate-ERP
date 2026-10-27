@@ -69,7 +69,7 @@ async function checkSupabase(): Promise<Check> {
   }
 
   return withTimeout("supabase", async (signal) => {
-    const response = await fetch(`${url}/rest/v1/products?select=id&limit=1`, {
+    const response = await fetch(`${url}/rest/v1/social_accounts?select=id&limit=1`, {
       headers: { apikey: key, authorization: `Bearer ${key}` },
       signal
     });
@@ -79,7 +79,7 @@ async function checkSupabase(): Promise<Check> {
     }
 
     const rows = (await response.json()) as unknown[];
-    return { name: "supabase", ok: true, detail: `${hostOf(url)} reachable (${rows.length} product row)` };
+    return { name: "supabase", ok: true, detail: `${hostOf(url)} reachable (${rows.length} account row)` };
   });
 }
 
