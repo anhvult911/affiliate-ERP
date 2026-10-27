@@ -1,0 +1,34 @@
+{
+  "sources": [
+    {
+      "name": "Hội Mẹ Bỉm Sữa Săn Deal",
+      "url": "https://www.facebook.com/groups/me-bim-san-deal",
+      "source_type": "group",
+      "niche": "me_bim",
+      "tone_of_voice": "mẹ bỉm thân thiện, chia sẻ thật, không chào hàng",
+      "group_rules": "Không gửi link trong bình luận đầu; trả lời đúng câu hỏi của bài; không nhắc giá nếu không được hỏi.",
+      "scan_interval_mins": 15,
+      "is_active": true
+    },
+    {
+      "name": "Nhà Đẹp Giá Rẻ",
+      "url": "https://www.facebook.com/groups/nha-dep-gia-re",
+      "source_type": "group",
+      "niche": "decor",
+      "tone_of_voice": "người thích dọn nhà, nói ngắn, khen cụ thể",
+      "group_rules": "Không spam nhiều bài liên tiếp; chỉ bình luận bài còn mới trong 24h.",
+      "scan_interval_mins": 30,
+      "is_active": true
+    },
+    {
+      "name": "KOL Review Đồ Gia Dụng",
+      "url": "https://www.facebook.com/kols/review-do-gia-dung",
+      "source_type": "fanpage",
+      "niche": "gia_dung",
+      "tone_of_voice": "người dùng thật, nêu cả ưu và nhược",
+      "group_rules": "Trang của KOL: chỉ bình luận khi bài đang nhận câu hỏi từ người khác.",
+      "scan_interval_mins": 60,
+      "is_active": true
+    }
+  ]
+}
