@@ -19,6 +19,7 @@ ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     NODE_ENV=production \
     BROWSER_CHANNEL="" \
+    BROWSER_HEADLESS=true \
     WORKER_HEALTH_PORT=8080 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -43,8 +44,10 @@ COPY workers ./workers
 
 WORKDIR /app/workers
 
-# Liveness endpoint (GET /health); the compose healthcheck probes it.
+# Liveness endpoint (GET /health); compose probes the same route.
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${WORKER_HEALTH_PORT}/health" || exit 1
 
 # Headed Chromium needs a display; Xvfb provides one without a physical monitor.
 # tini reaps zombie browser processes, of which there are many.

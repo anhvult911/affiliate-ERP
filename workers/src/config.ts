@@ -32,6 +32,8 @@ export type WorkerConfig = {
   localProfileDir: string;
   /** "chrome" uses the installed Chrome; empty uses Playwright's Chromium (containers). */
   browserChannel: string;
+  /** Headed browser for the local provider; a VPS has no display, so this defaults true. */
+  browserHeadless: boolean;
   /** Page the `fixture` executor drives (a local comment form). */
   fixtureUrl: string;
   /** Where evidence screenshots land. */
@@ -75,10 +77,11 @@ const DEFAULTS = {
   workerName: "worker-1",
   pollIntervalMs: 15_000,
   maxPerClaim: 3,
-  gpmApiUrl: "http://127.0.0.1:19995",
+  gpmApiUrl: "http://127.0.0.1:9495",
   genloginApiUrl: "http://127.0.0.1:55555",
   localProfileDir: "./.profiles",
   browserChannel: "chrome",
+  browserHeadless: true,
   fixtureUrl: "",
   evidenceDir: "./.evidence",
   assetsDir: "./assets"
@@ -187,6 +190,7 @@ export function loadConfig(): WorkerConfig {
     genloginApiUrl: readString("GENLOGIN_API_URL", DEFAULTS.genloginApiUrl).replace(/\/$/, ""),
     localProfileDir: readString("LOCAL_PROFILE_DIR", DEFAULTS.localProfileDir),
     browserChannel: readString("BROWSER_CHANNEL", DEFAULTS.browserChannel),
+    browserHeadless: readBoolean("BROWSER_HEADLESS", DEFAULTS.browserHeadless),
     fixtureUrl: readString("FIXTURE_URL", DEFAULTS.fixtureUrl),
     evidenceDir: readString("EVIDENCE_DIR", DEFAULTS.evidenceDir),
     assetsDir: readString("ASSETS_DIR", DEFAULTS.assetsDir),
