@@ -2,7 +2,7 @@
   "name": "affiliate-automation-erp",
   "version": "0.1.0",
   "private": true,
-  "description": "In-house Affiliate Automation & Social Hub \u2014 Next.js 14+ App Router + Supabase",
+  "description": "In-house Affiliate Automation & Social Hub — Next.js 14+ App Router + Supabase",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -26,6 +26,7 @@
     "import:targets": "tsx scripts/import-targets.ts",
     "demo:e2e": "tsx scripts/demo-e2e.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "verify:local": "tsx scripts/local-sweep.ts",
     "preflight:prod": "tsx scripts/preflight-prod.ts"
   },
   "dependencies": {

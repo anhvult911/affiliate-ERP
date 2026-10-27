@@ -23,6 +23,24 @@ pnpm demo:e2e
 
 **Kỳ vọng:** 7 bước in ra `✓`, kết thúc bằng `DEMO OK`. Chạy lại lần 2 → vẫn OK (demo tự dọn state).
 
+### Path A.2 — Quét toàn bộ API thật (khuyến nghị sau demo)
+
+`demo:e2e` gọi thẳng thư viện; lệnh dưới đây gọi **đúng các route HTTP** mà worker/cron dùng, qua server đang chạy:
+
+```powershell
+pnpm build; pnpm start          # terminal 1 — server trên http://localhost:3000
+pnpm verify:local               # terminal 2 — 25 check, ~20 giây
+```
+
+Phủ: RLS (anon không đọc được), radar ingest + idempotency + negative cache, auto-match bằng
+Gemini (khi có `GEMINI_API_KEY`), sinh draft, duyệt → `sub_id`, claim, report (+ trust),
+postback 2 lần (không double-count), reconcile, analytics RPC, warming due, health cron,
+token sai → 401, và nhánh `CRON_SECRET` ≠ worker token.
+
+**Kỳ vọng:** `25/25 passed`. Nếu thiếu `GEMINI_API_KEY` → 4 check AI in `SKIP`, còn `21/21 passed · 4 skipped`.
+Script tự dọn mọi fixture (task/conversion/`radar_seen`/source) và khôi phục `last_action_at`
+của account mà nó tạm xoá để test claim.
+
 Nếu `supabase start` fail trên Windows: mở WSL2, cài Docker Engine trong WSL, chạy lại lệnh trong WSL (repo trên `/mnt/d/...`).
 
 ## Path B — Cloud smoke (integration thật)
@@ -48,6 +66,9 @@ PASS  gemini     gemini-3.1-flash-lite answered
 FAIL  shopee     missing SHOPEE_AFFILIATE_APP_ID / ...      ← ĐÚNG KHI CHƯA CÓ CRED
 PASS  telegram   @ERPconfirmed_bot · chat ••••789
 ```
+Dòng đầu của `smoke` in ra `(env from: ...)` — kiểm tra nó đang trỏ đúng file bạn muốn
+(`.env.local` cho local, `.env.production` cho cloud).
+
 → 3/4 PASS là ổn (Shopee FAIL đến khi có App ID/Secret — không phải lỗi).
 
 ⚠️ Path B **không chạy demo:e2e** (demo từ chối cloud để xóa nhầm data). Demo chỉ chạy Path A.
