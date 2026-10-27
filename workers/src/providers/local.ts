@@ -19,7 +19,9 @@ export class LocalProfileProvider implements AntidetectProvider {
   constructor(
     private readonly profileRoot: string,
     /** Empty string = Playwright's bundled Chromium (containers, CI). */
-    private readonly channel: string = "chrome"
+    private readonly channel: string = "chrome",
+    /** A VPS has no display; headed mode there fails at launch. */
+    private readonly headless: boolean = true
   ) {}
 
   async openProfile({ profileId, proxy, logger }: OpenProfileOptions): Promise<BrowserSession> {
@@ -36,6 +38,7 @@ export class LocalProfileProvider implements AntidetectProvider {
       userDataDir,
       proxy,
       channel: this.channel || null,
+      headless: this.headless,
       close: async () => {
         // Chromium keeps the profile on disk on purpose: cookies and warm-up
         // history are what make the next run look continuous.

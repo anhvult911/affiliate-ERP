@@ -11,7 +11,7 @@ export function resolveProvider(config: WorkerConfig): AntidetectProvider {
     case "genlogin":
       return new GenloginProvider(config.genloginApiUrl);
     case "local":
-      return new LocalProfileProvider(config.localProfileDir, config.browserChannel);
+      return new LocalProfileProvider(config.localProfileDir, config.browserChannel, config.browserHeadless);
   }
 }
 
