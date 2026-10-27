@@ -23,6 +23,7 @@
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
+    "preflight:prod": "tsx scripts/preflight-prod.ts",
     "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
