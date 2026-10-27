@@ -82,5 +82,13 @@ Ghi chú kỹ thuật cho lần sau (HR):
 - [ ] Orca: deploy workers lên VPS + đăng ký cron (30' sync, hourly reconcile, weekly review) — cần env `WORKER_SHARED_SECRET`/`TELEGRAM_BOT_TOKEN`
 - [ ] Demo end-to-end: sync → radar → generate → approval → comment → postback → report
 
+## 6.12 SESSION-3 CLOSE-OUT (2026-10-26, HR)
+
+**Round 3 (P3-1..5) MERGE XONG — 5/5: #28 deploy artifacts + /health + xvfb, #29 smoke, #30 e2e demo, #31 preflight, #32 import targets. CI main xanh.**
+
+- Docs mới: `docs/TESTING.md` (Path A local / Path B cloud smoke / Path C VPS), `docs/DEPLOY.md` (runbook mkt-hk-test: Docker + GPM Linux + VNC + monitor RAM bảo vệ trippool).
+- Lessons round 3: union-resolve trên package.json **không dùng được** → thay bằng resolver semantic (`resolve_pkg.py` v2: rebuild scripts block, dedupe key); CI "no checks" retry loop của merge-batch2.sh hoạt động ổn định — tái sử dụng.
+- PM env status: Telegram ✅ Gemini ✅ Supabase Seoul ✅ tokens ✅ — còn Shopee App ID/Secret (đang chờ duyệt).
+
 ---
-*Cập nhật lần cuối: 2026-10-26 (HR) — SESSION-2 CLOSE-OUT, mọi PR đã merge.*
+*Cập nhật lần cuối: 2026-10-26 (HR) — SESSION-3 CLOSE-OUT.*
