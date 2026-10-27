@@ -29,6 +29,12 @@ export type BrowserSession =
        * container without a system Chrome has.
        */
       channel: string | null;
+      /**
+       * Default true. A server has no display, so a headed browser dies there; the
+       * antidetect providers are unaffected because they connect over CDP to a browser
+       * that GPM/GenLogin started itself.
+       */
+      headless: boolean;
       close(): Promise<void>;
     };
 
@@ -75,7 +81,7 @@ export async function launchBrowser(session: BrowserSession, logger: Logger): Pr
     // string, fonts and WebGL renderer are the ones the host actually has, so the
     // profile looks like a normal browser instead of a testing binary.
     ...(session.channel ? { channel: session.channel } : {}),
-    headless: false,
+    headless: session.headless,
     viewport: null,
     locale: "vi-VN",
     timezoneId: "Asia/Ho_Chi_Minh",

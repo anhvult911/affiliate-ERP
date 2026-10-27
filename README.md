@@ -446,6 +446,103 @@ fall back to the host IP.
 DRY_RUN=false ANTIDETECT_PROVIDER=local ALLOW_LOCAL_POSTING=true pnpm worker:once
 ```
 
+## Deploy to VPS
+
+The app and the worker deploy separately: Vercel (or any Node host) runs Next.js, the VPS
+runs the worker because it needs a browser engine and persistent profiles.
+
+### Sizing and resource protection
+
+The compose file caps the worker at **1 CPU / 1 GB**. That is deliberate: this box is
+expected to share space with other services, and an unbounded Chromium is the fastest way
+to take a 4 GB machine down.
+
+```bash
+docker stats --no-stream                 # per-container CPU/RAM, before and after
+htop                                     # what else the box is doing
+docker compose -f docker-compose.prod.yml logs -f worker
+docker inspect --format '{{json .State.Health}}' $(docker compose -f docker-compose.prod.yml ps -q worker)
+```
+
+Rules of thumb on a 4 GB / 2 core box that already runs something else:
+
+| Situation | Action |
+|---|---|
+| worker < 600 MB in `docker stats`, health green | fine, stay at one profile |
+| climbing toward the 1 GB limit, health flapping | stop; one profile is the ceiling here |
+| you need 2-3 concurrent browser profiles | move the worker to its own VPS (~100k VND/month) |
+| host `htop` shows swap in use | the box is overloaded: the limit did its job, upgrade |
+
+### Headless
+
+A server has no display, so the default is `BROWSER_HEADLESS=true` and the bundled
+Chromium runs headless. Only the `local` provider is affected: the antidetect providers
+(`gpm`/`genlogin`) connect over CDP to a browser the tool started itself, so the worker's
+own display does not matter.
+
+### GPM-Login on the same VPS
+
+GPM-Login has a Linux build and is the supported choice here; **GenLogin is
+Windows/macOS only**, so it is not an option for this box.
+
+1. Install GPM-Login for Linux on the host and start it once to confirm it launches.
+2. Its local API binds `127.0.0.1:9495` - do **not** expose that port.
+3. In `.env.production`:
+
+   ```bash
+   ANTIDETECT_PROVIDER=gpm
+   GPM_API_URL="http://host.docker.internal:9495"
+   BROWSER_CHANNEL=""
+   ```
+
+   `docker-compose.prod.yml` already maps `host.docker.internal` to the host gateway, so
+   the container reaches GPM without `network_mode: host` (which would also expose every
+   other port the worker touches).
+4. GPM still needs a display on the host even though the worker is headless: install
+   `xvfb` + `x11vnc`, run GPM inside `xvfb-run`, and connect over VNC when a checkpoint
+   needs a human. The worker never uses that display; it exists only for GPM.
+5. Create one profile in GPM, put its id in `social_accounts.browser_profile_id`, and
+   point the account's `proxy_ip` at the same proxy the profile uses.
+
+```bash
+# package sketch on Ubuntu 22.04
+sudo apt-get install -y xvfb x11vnc
+Xvfb :99 -screen 0 1280x800x24 &
+DISPLAY=:99 x11vnc -localhost -nopw -forever &
+DISPLAY=:99 ./gpm-login &
+```
+
+### Rollout: one profile first
+
+1. Install Docker, GPM-Login, `xvfb`/`x11vnc` on the VPS; confirm GPM opens a profile by
+   hand and that the proxy it uses is reachable.
+2. Deploy the worker with **one** Facebook account: `daily_comment_limit = 3`,
+   `daily_warming_limit = 1`, `min_action_gap_minutes = 60`, radar on a single light
+   source, `RADAR_SOURCES_PER_CYCLE=1`.
+3. Watch `docker stats`, `/api/cron/health` and the Telegram alerts for 1-2 weeks. Only
+   then add the second profile - and move to a dedicated box before the third.
+
+```bash
+# on the VPS, in the repository root
+cp .env.example .env.production        # fill in the real values (never commit it)
+docker compose -f docker-compose.prod.yml config    # validates before anything starts
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs -f worker
+docker compose -f docker-compose.prod.yml restart worker     # after an env change
+```
+
+What the compose file gives you: `restart: unless-stopped`, a healthcheck against the
+worker's own `GET /health` (it answers `{ok, version}` without touching the app), named
+volumes for profiles/evidence/logs, log rotation, and the resource cap above. The profiles
+volume is the one that matters: it holds the logged-in browser sessions, so losing it means
+logging every account in again - the exact pattern that gets accounts flagged.
+
+Nothing is published to the host: the worker only makes outbound connections, and the
+health endpoint stays inside the container network.
+
+One worker per account at a time: the claim RPC is atomic, so running two workers is safe
+for the queue but pointless on a single machine (both would fight for the same profiles).
+
 ## Verifying the schema without a database server
 
 ```bash
