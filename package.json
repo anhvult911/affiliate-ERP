@@ -23,8 +23,9 @@
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
-    "preflight:prod": "tsx scripts/preflight-prod.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "demo:e2e": "tsx scripts/demo-e2e.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "preflight:prod": "tsx scripts/preflight-prod.ts"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
