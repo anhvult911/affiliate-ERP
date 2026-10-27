@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 /**
  * Worker configuration.
  *
@@ -31,6 +32,8 @@ export type WorkerConfig = {
   localProfileDir: string;
   /** "chrome" uses the installed Chrome; empty uses Playwright's Chromium (containers). */
   browserChannel: string;
+  /** Headed browser for the local provider; a VPS has no display, so this defaults true. */
+  browserHeadless: boolean;
   /** Page the `fixture` executor drives (a local comment form). */
   fixtureUrl: string;
   /** Where evidence screenshots land. */
@@ -45,6 +48,10 @@ export type WorkerConfig = {
   warmingOnly: boolean;
   /** How often the worker pings /api/worker/heartbeat. */
   heartbeatIntervalMs: number;
+  /** Port for the container liveness endpoint (GET /health); 0 disables it. */
+  healthPort: number;
+  /** Worker package version, reported by /health. */
+  workerVersion: string;
   /** Run the radar scan cycle (scrape watchlist sources, hand posts to ingest). */
   radarEnabled: boolean;
   /** Sources scanned per cycle. */
@@ -70,10 +77,11 @@ const DEFAULTS = {
   workerName: "worker-1",
   pollIntervalMs: 15_000,
   maxPerClaim: 3,
-  gpmApiUrl: "http://127.0.0.1:19995",
+  gpmApiUrl: "http://127.0.0.1:9495",
   genloginApiUrl: "http://127.0.0.1:55555",
   localProfileDir: "./.profiles",
   browserChannel: "chrome",
+  browserHeadless: true,
   fixtureUrl: "",
   evidenceDir: "./.evidence",
   assetsDir: "./assets"
@@ -145,6 +153,22 @@ export function shouldClaimTasks(config: {
   return true;
 }
 
+/**
+ * Version reported by /health. Read from the package manifest so an image tag and the
+ * endpoint cannot disagree; WORKER_VERSION overrides it when the runtime image has no
+ * package.json (the Dockerfile copies one, but a stripped image might not).
+ */
+function readPackageVersion(): string {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      version?: string;
+    };
+    return manifest.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function loadConfig(): WorkerConfig {
   const executorOverride = readFlag("executor");
   const dryRunOverride = readFlag("dry-run");
@@ -166,6 +190,7 @@ export function loadConfig(): WorkerConfig {
     genloginApiUrl: readString("GENLOGIN_API_URL", DEFAULTS.genloginApiUrl).replace(/\/$/, ""),
     localProfileDir: readString("LOCAL_PROFILE_DIR", DEFAULTS.localProfileDir),
     browserChannel: readString("BROWSER_CHANNEL", DEFAULTS.browserChannel),
+    browserHeadless: readBoolean("BROWSER_HEADLESS", DEFAULTS.browserHeadless),
     fixtureUrl: readString("FIXTURE_URL", DEFAULTS.fixtureUrl),
     evidenceDir: readString("EVIDENCE_DIR", DEFAULTS.evidenceDir),
     assetsDir: readString("ASSETS_DIR", DEFAULTS.assetsDir),
@@ -173,6 +198,8 @@ export function loadConfig(): WorkerConfig {
     warmingEnabled: readBoolean("WARMING_ENABLED", false),
     warmingOnly: hasFlag("warming-only"),
     heartbeatIntervalMs: readNumber("HEARTBEAT_INTERVAL_MS", 60_000),
+    healthPort: readNumber("WORKER_HEALTH_PORT", 8080),
+    workerVersion: readString("WORKER_VERSION", readPackageVersion()),
     radarEnabled: readBoolean("RADAR_ENABLED", false),
     radarSourcesPerCycle: readNumber("RADAR_SOURCES_PER_CYCLE", 3),
     radarPinnedProductId: process.env.RADAR_PINNED_PRODUCT_ID?.trim() || null,
