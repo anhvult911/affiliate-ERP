@@ -176,11 +176,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const match = await analyzePostForMatch({
-      postContent: input.postContent ?? "",
-      postImages: input.postImages ?? [],
-      candidates
-    });
+    let match: Awaited<ReturnType<typeof analyzePostForMatch>>;
+    try {
+      match = await analyzePostForMatch({
+        postContent: input.postContent ?? "",
+        postImages: input.postImages ?? [],
+        candidates
+      });
+    } catch (error) {
+      // A model outage (504 DEADLINE_EXPIRED on both fallback models after ~32 s, seen in
+      // practice) used to escape this route as an unhandled exception: the worker got a
+      // 500 with an empty body, so it could not even say why, and nothing retried
+      // differently. Answer honestly instead: 503 + a readable reason, and do NOT record
+      // the post as seen — the next scan must be free to try it again.
+      return workerJson(
+        {
+          ok: false,
+          retryable: true,
+          error: `Matching failed: ${error instanceof Error ? error.message : String(error)}`
+        },
+        503
+      );
+    }
 
     matchedProductId = match.productId;
     matchScore = match.score;

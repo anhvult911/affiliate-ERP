@@ -18,22 +18,39 @@ const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 type Result = { name: string; ok: boolean; skipped?: boolean; detail: string; ms: number };
 const results: Result[] = [];
 
+/** A check that could not run because an external service is down — not a code failure. */
+class SkipCheck extends Error {}
+
 async function skip(name: string, reason: string): Promise<void> {
   results.push({ name, ok: true, skipped: true, detail: reason, ms: 0 });
 }
 
-async function check(name: string, run: () => Promise<string>): Promise<void> {
+/**
+ * `attempts` exists for the AI checks: the model chain already retries inside the app, but
+ * a 30-second upstream outage can still outlast one call. A retryable 503 is retried once
+ * and only then reported as SKIP — an app bug would surface as a non-retryable failure.
+ */
+async function check(name: string, run: () => Promise<string>, attempts = 1): Promise<void> {
   const started = Date.now();
-  try {
-    const detail = await run();
-    results.push({ name, ok: true, detail, ms: Date.now() - started });
-  } catch (error) {
-    results.push({
-      name,
-      ok: false,
-      detail: error instanceof Error ? error.message : String(error),
-      ms: Date.now() - started
-    });
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const detail = await run();
+      results.push({ name, ok: true, detail, ms: Date.now() - started });
+      return;
+    } catch (error) {
+      if (error instanceof SkipCheck) {
+        if (attempt < attempts) continue;
+        results.push({ name, ok: true, skipped: true, detail: error.message, ms: Date.now() - started });
+        return;
+      }
+      results.push({
+        name,
+        ok: false,
+        detail: error instanceof Error ? error.message : String(error),
+        ms: Date.now() - started
+      });
+      return;
+    }
   }
 }
 
@@ -270,10 +287,27 @@ async function main(): Promise<number> {
   });
 
   await check("POST /api/worker/tasks/{id}/report completes it", async () => {
-    const [before] = await json(
-      await db(`social_accounts?select=id,trust_score&status=eq.active&limit=1`)
+    // Read the account from the task, never "the first active account". Approval assigns
+    // the best persona (or the operator's pick), and the report route bumps trust on
+    // `assigned_account_id` — so watching an unordered `status=eq.active&limit=1` row made
+    // this check depend on heap order and it failed once as "44 -> 44" while the assigned
+    // account had in fact moved.
+    const [assigned] = await json(
+      await db(`comment_tasks?select=assigned_account_id,secondary_account_id,execution_mode&id=eq.${taskId}`)
     );
-    if (!before) throw new Error("no account to check trust against");
+    if (!assigned?.assigned_account_id) throw new Error("the task has no assigned account");
+    if (assigned.assigned_account_id !== accountId) {
+      throw new Error("the task is assigned to a different account than the one claimed for");
+    }
+
+    const [before] = await json(
+      await db(`social_accounts?select=id,trust_score&id=eq.${assigned.assigned_account_id}`)
+    );
+    if (!before) throw new Error("the assigned account disappeared");
+
+    const [secondaryBefore] = assigned.secondary_account_id
+      ? await json(await db(`social_accounts?select=trust_score&id=eq.${assigned.secondary_account_id}`))
+      : [null];
 
     const response = await fetch(`${BASE}/api/worker/tasks/${taskId}/report`, {
       method: "POST",
@@ -290,8 +324,22 @@ async function main(): Promise<number> {
 
     const [after] = await json(await db(`social_accounts?select=trust_score&id=eq.${before.id}`));
     if (after.trust_score <= before.trust_score) {
-      throw new Error(`trust did not move: ${before.trust_score} -> ${after.trust_score}`);
+      throw new Error(`trust did not move on the assigned account: ${before.trust_score} -> ${after.trust_score}`);
     }
+
+    // Seeding mode pays the tier-2 persona too; a single-mode task must not.
+    if (secondaryBefore) {
+      const [secondaryAfter] = await json(
+        await db(`social_accounts?select=trust_score&id=eq.${assigned.secondary_account_id}`)
+      );
+      if (secondaryAfter.trust_score <= secondaryBefore.trust_score) {
+        throw new Error(
+          `tier-2 trust did not move: ${secondaryBefore.trust_score} -> ${secondaryAfter.trust_score}`
+        );
+      }
+      return `completed · trust ${before.trust_score} -> ${after.trust_score} (tier-2 ${secondaryBefore.trust_score} -> ${secondaryAfter.trust_score})`;
+    }
+
     return `completed · executed_at set · trust ${before.trust_score} -> ${after.trust_score}`;
   });
 
@@ -394,6 +442,7 @@ async function main(): Promise<number> {
         })
       });
       const body = await json(response);
+      if (body.retryable) throw new SkipCheck(`model unavailable, ingest answered 503: ${body.error}`);
       if (!body.created) throw new Error(`not created: ${JSON.stringify(body).slice(0, 140)}`);
       if (body.score < Number(process.env.RADAR_MATCH_THRESHOLD ?? 0.8)) {
         throw new Error(`score ${body.score} below the threshold`);
@@ -404,7 +453,7 @@ async function main(): Promise<number> {
       if (!row?.matched_product_id) throw new Error("no product was matched");
       if (row.ai_draft_comment) throw new Error("a draft was generated without draft:true");
       return `score ${body.score} · matched · no draft unless asked`;
-    });
+    }, 2);
 
     await check("radar drafts a comment", async () => {
       const draftUrl = autoUrl.replace("/auto-", "/draft-");
@@ -422,14 +471,16 @@ async function main(): Promise<number> {
         })
       });
       const body = await json(response);
-      if (!body.created || !body.drafted) throw new Error(`draft not produced: ${JSON.stringify(body).slice(0, 120)}`);
+      if (body.retryable) throw new SkipCheck(`model unavailable, ingest answered 503: ${body.error}`);
+      if (!body.created) throw new Error(`not created: ${JSON.stringify(body).slice(0, 140)}`);
+      if (!body.drafted) throw new Error(`no draft: ${JSON.stringify(body).slice(0, 140)}`);
       const [row] = await json(
         await db(`comment_tasks?select=ai_draft_comment&id=eq.${body.taskId}`)
       );
       const draft = row?.ai_draft_comment ?? "";
       if (draft.length < 40) throw new Error(`draft looks empty: ${draft.length} chars`);
       return `${draft.length} chars: "${draft.slice(0, 46)}…"`;
-    });
+    }, 2);
 
     await check("radar rejects off-topic posts and caches it", async () => {
       const noiseUrl = `https://www.facebook.com/groups/me-bim-vn/posts/noise-${stamp}`;
@@ -447,13 +498,14 @@ async function main(): Promise<number> {
         });
 
       const first = await json(await send());
+      if (first.retryable) throw new SkipCheck(`model unavailable, ingest answered 503: ${first.error}`);
       if (first.created || !first.belowThreshold) throw new Error("an off-topic post was accepted");
 
       const started = Date.now();
       const second = await json(await send());
       if (!second.cached) throw new Error("the second call was not served from the seen cache");
       return `below threshold (${first.score}) · re-scan ${Date.now() - started}ms from cache`;
-    });
+    }, 2);
   }
 
   /* --------------------------------------------------- warming + health */
