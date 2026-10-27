@@ -11,11 +11,10 @@
  * Deliberately not a unit test: it hits the real services. The unit tests cover the
  * pieces of logic it borrows (probe classification, model chain, redaction).
  */
-import { existsSync } from "node:fs";
-
 import { ShopeeClient, ShopeeError } from "../src/lib/shopee/client";
 import { describeShopeeConfig, isShopeeConfigured, readShopeeConfig } from "../src/lib/shopee/config";
 import { runProductOfferProbe } from "../src/lib/shopee/probe";
+import { loadScriptEnv, LOCAL_ENV_FILES, type LoadedEnv } from "./lib/env";
 import { describeEnv, hostOf, maskSecret } from "./lib/redact";
 
 type Check = { name: string; ok: boolean; detail: string };
@@ -26,15 +25,14 @@ const TIMEOUT_MS = 20_000;
 const GEMINI_ATTEMPT_TIMEOUT_MS = 12_000;
 const GEMINI_ROUNDS = 2;
 
-function loadEnvironment(): void {
-  for (const file of [".env.production", ".env.local", ".env"]) {
-    if (!existsSync(file)) continue;
-    try {
-      process.loadEnvFile(file);
-    } catch {
-      // A malformed file is reported by the checks that need it, not here.
-    }
-  }
+/**
+ * Local-first on purpose: a developer running `pnpm smoke` is verifying the local stack,
+ * and the previous order (.env.production first, which `loadEnvFile` never overwrites)
+ * made this script silently test the cloud project. On a VPS only .env.production
+ * exists, so the same call does the right thing there.
+ */
+function loadEnvironment(): LoadedEnv {
+  return loadScriptEnv(LOCAL_ENV_FILES);
 }
 
 function env(name: string): string {
@@ -187,9 +185,10 @@ async function checkTelegram(): Promise<Check> {
 /* ------------------------------------------------------------------ run */
 
 async function main(): Promise<number> {
-  loadEnvironment();
+  const loaded = loadEnvironment();
+  const envFrom = [...new Set(loaded.sources.values())].join(", ") || "(process environment only)";
 
-  console.log("smoke test — external integrations\n");
+  console.log(`smoke test — external integrations (env from: ${envFrom})\n`);
 
   const checks = [checkSupabase, checkGemini, checkShopee, checkTelegram];
   const results: Check[] = [];

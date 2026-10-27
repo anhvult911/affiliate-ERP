@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { loadScriptEnv, PRODUCTION_ENV_FILES } from "./lib/env";
 import {
   checkCronConfig,
   checkEnv,
@@ -24,17 +25,10 @@ import {
   SHOPEE_CRON_PATHS
 } from "./lib/preflight";
 
+/** Production-first: this is the check that decides whether a deploy is ready. */
 function loadEnvironment(): string {
-  for (const file of [".env.production", ".env.local", ".env"]) {
-    if (!existsSync(file)) continue;
-    try {
-      process.loadEnvFile(file);
-      return file;
-    } catch {
-      continue;
-    }
-  }
-  return "(none)";
+  const loaded = loadScriptEnv(PRODUCTION_ENV_FILES);
+  return loaded.files.find((entry) => entry.keys > 0)?.file ?? "(none)";
 }
 
 function line(ok: boolean, label: string, detail: string): void {
