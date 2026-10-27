@@ -156,6 +156,28 @@ class RadarHealthError extends Error {
   }
 }
 
+/** The body sent to /api/worker/radar/ingest. Pure so the contract stays testable. */
+export type RadarIngestRequest = Parameters<WorkerApi["radarIngest"]>[0];
+
+export function buildIngestRequest(
+  source: Pick<RadarSource, "id">,
+  post: { postUrl: string; content: string; images: string[] },
+  pinnedProductId: string | null
+): RadarIngestRequest {
+  return {
+    sourceId: source.id,
+    postUrl: post.postUrl,
+    postContent: post.content,
+    postImages: post.images,
+    // A pinned product is how the pipeline works before GEMINI_API_KEY exists.
+    ...(pinnedProductId ? { productId: pinnedProductId } : {}),
+    // Ask the API for the draft in the same round-trip. The API only spends a Gemini call
+    // on posts that cleared the match threshold (off-topic posts return earlier), and it
+    // treats a failed draft as best-effort, so this cannot fail the ingest.
+    draft: true
+  };
+}
+
 async function ingestPost(
   deps: RadarDeps,
   source: RadarSource,
@@ -163,14 +185,9 @@ async function ingestPost(
   log: Logger
 ): Promise<RadarIngestResult | null> {
   try {
-    const outcome = await deps.api.radarIngest({
-      sourceId: source.id,
-      postUrl: post.postUrl,
-      postContent: post.content,
-      postImages: post.images,
-      // A pinned product is how the pipeline works before GEMINI_API_KEY exists.
-      ...(deps.config.radarPinnedProductId ? { productId: deps.config.radarPinnedProductId } : {})
-    });
+    const outcome = await deps.api.radarIngest(
+      buildIngestRequest(source, post, deps.config.radarPinnedProductId)
+    );
 
     if (outcome.created) {
       log.info("radar: queued a post", { taskId: outcome.taskId, score: outcome.score });
