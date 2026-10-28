@@ -8,9 +8,13 @@ import {
   answerCallbackQuery,
   editMessageText,
   sendMessage,
+  sendToChat,
+  telegramChannelId,
   telegramChatId,
   webhookSecret
 } from "@/lib/telegram/api";
+import { isDealCallback, parseDealCallback } from "@/lib/deals/callbacks";
+import { buildDealCaption, escapeHtml, trimForTelegram } from "@/lib/deals/copy";
 import { isAllowedChat, readUpdateChatId } from "@/lib/telegram/allowlist";
 import { buildQueueMessage, buildStatusMessage } from "@/lib/telegram/messages";
 import { loadPendingCaptures, loadStatusView } from "@/lib/telegram/queries";
@@ -127,6 +131,12 @@ async function handleCommand(chatId: number, rawText: string): Promise<void> {
 
 async function handleCallback(query: NonNullable<TelegramUpdate["callback_query"]>): Promise<void> {
   const data = query.data ?? "";
+
+  if (isDealCallback(data)) {
+    await handleDealCallback(query, data);
+    return;
+  }
+
   const [action, taskId] = data.split(":");
   const db = adminDb();
 
@@ -170,6 +180,75 @@ async function handleCallback(query: NonNullable<TelegramUpdate["callback_query"
   }
 
   await answerCallbackQuery(query.id, "Hành động không rõ");
+}
+
+/**
+ * Deal preview buttons (P5-1).
+ *
+ * `deal:post:<productId>` publishes the caption that was stored when the preview was sent
+ * (`products.deal_caption`) — the operator approves exactly the text they read, so
+ * regenerating here would be a different post. `deal:skip` records nothing: the preview
+ * cooldown already keeps the product out of today's second run.
+ */
+async function handleDealCallback(
+  query: NonNullable<TelegramUpdate["callback_query"]>,
+  data: string
+): Promise<void> {
+  const callback = parseDealCallback(data);
+  if (!callback) {
+    await answerCallbackQuery(query.id, "Nút không hợp lệ");
+    return;
+  }
+
+  const { verb, productId } = callback;
+
+  if (verb === "skip") {
+    await answerCallbackQuery(query.id, "Đã bỏ qua");
+    await settleMessage(query, "🚫 <b>Bỏ qua</b> deal này.");
+    return;
+  }
+
+  const channelId = telegramChannelId();
+  if (!channelId) {
+    await answerCallbackQuery(query.id, "Chưa cấu hình TELEGRAM_CHANNEL_ID");
+    return;
+  }
+
+  const db = adminDb();
+  const { data: product, error } = await db
+    .from("products")
+    .select("id,name,price,affiliate_short_link,deal_caption")
+    .eq("id", productId)
+    .maybeSingle();
+
+  if (error || !product) {
+    await answerCallbackQuery(query.id, "Không tìm thấy sản phẩm");
+    return;
+  }
+
+  if (!product.affiliate_short_link) {
+    await answerCallbackQuery(query.id, "Sản phẩm không còn link affiliate");
+    return;
+  }
+
+  const caption = product.deal_caption?.trim() || buildDealCaption(product);
+  const sent = await sendToChat(channelId, trimForTelegram(caption));
+
+  if (!sent) {
+    await answerCallbackQuery(
+      query.id,
+      "Gửi lên kênh thất bại — kiểm tra bot có phải admin của kênh không"
+    );
+    return;
+  }
+
+  await db.from("products").update({ last_dealt_at: new Date().toISOString() }).eq("id", productId);
+
+  await answerCallbackQuery(query.id, "Đã đăng lên kênh");
+  await settleMessage(
+    query,
+    `✅ <b>Đã đăng lên kênh</b>\n<code>${escapeHtml(product.name)}</code>`
+  );
 }
 
 /** Constant-time compare: a byte-by-byte early exit leaks the secret's prefix. */

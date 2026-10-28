@@ -522,6 +522,22 @@ try {
 }
 record("sync_source only accepts csv or api", badSyncSourceRejected);
 
+/* --------------------------------------------- deal channel columns (P5-1) */
+eq(
+  "deal channel columns exist",
+  await rows(`select column_name from information_schema.columns
+               where table_schema = 'public' and table_name = 'products'
+                 and column_name in ('last_dealt_at','deal_previewed_at','deal_caption')
+               order by column_name`),
+  [{ column_name: "deal_caption" }, { column_name: "deal_previewed_at" }, { column_name: "last_dealt_at" }]
+);
+
+record(
+  "deal candidate partial index exists",
+  (await scalar(`select count(*)::int from pg_indexes
+                  where schemaname = 'public' and indexname = 'products_deal_candidates_idx'`)) === 1
+);
+
 /* ------------------------------------ sync state: resume watermark (T-SHOPEE-09) */
 eq(
   "sync state starts empty",
