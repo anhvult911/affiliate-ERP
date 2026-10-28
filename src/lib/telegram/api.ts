@@ -23,6 +23,15 @@ export function telegramChatId(): string | null {
   return process.env.TELEGRAM_CHAT_ID?.trim() || null;
 }
 
+/**
+ * The public deal channel. Accepts `@username` and `-100…`; validation lives in
+ * `readDealPosterConfig`. The bot must be an admin of that channel — Telegram answers
+ * "not enough rights" otherwise, which is reported to the operator, never thrown.
+ */
+export function telegramChannelId(): string | null {
+  return process.env.TELEGRAM_CHANNEL_ID?.trim() || null;
+}
+
 function apiBase(): string {
   return (process.env.TELEGRAM_API_BASE?.trim() || DEFAULT_API_BASE).replace(/\/$/, "");
 }
@@ -69,6 +78,19 @@ function describe(body: unknown): string {
 export function sendMessage(text: string, keyboard?: InlineKeyboard): Promise<SendMessageResult | null> {
   const chatId = telegramChatId();
   if (!chatId) return Promise.resolve(null);
+  return sendToChat(chatId, text, keyboard);
+}
+
+/**
+ * Same message, explicit chat. Used by the deal poster (operator chat in preview mode,
+ * the channel in auto mode) and by the approve button, which posts what was reviewed.
+ */
+export function sendToChat(
+  chatId: string,
+  text: string,
+  keyboard?: InlineKeyboard
+): Promise<SendMessageResult | null> {
+  if (!chatId.trim()) return Promise.resolve(null);
 
   return call<SendMessageResult>("sendMessage", {
     chat_id: chatId,
