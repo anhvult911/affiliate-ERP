@@ -44,6 +44,8 @@ export function backoffDelayMs(attempt: number, baseMs = 800, capMs = 30_000): n
 
 export type PacedJobResult = {
   status: "ok" | "stopped" | "failed";
+  /** The classification that ended the run; absent on success. */
+  action?: RunAction;
   pages: number;
   requests: number;
   items: number;
@@ -103,6 +105,7 @@ export async function runPacedJob<T>(options: PacedJobOptions<T>): Promise<Paced
 
       return {
         status: action === "retry" ? "failed" : "stopped",
+        action,
         pages,
         requests,
         items,
@@ -120,7 +123,7 @@ export async function runPacedJob<T>(options: PacedJobOptions<T>): Promise<Paced
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await options.recordError(message).catch(() => undefined);
-        return { status: "failed", pages, requests, items, error: message };
+        return { status: "failed", action: "fail", pages, requests, items, error: message };
       }
 
       items += page.items.length;
