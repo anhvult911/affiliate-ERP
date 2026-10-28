@@ -27,7 +27,8 @@
     "demo:e2e": "tsx scripts/demo-e2e.ts",
     "smoke": "tsx scripts/smoke.ts",
     "verify:local": "tsx scripts/local-sweep.ts",
-    "preflight:prod": "tsx scripts/preflight-prod.ts"
+    "preflight:prod": "tsx scripts/preflight-prod.ts",
+    "telegram:webhook": "tsx scripts/telegram-webhook.ts"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
