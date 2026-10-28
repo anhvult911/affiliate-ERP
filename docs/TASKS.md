@@ -90,5 +90,14 @@ Ghi chú kỹ thuật cho lần sau (HR):
 - Lessons round 3: union-resolve trên package.json **không dùng được** → thay bằng resolver semantic (`resolve_pkg.py` v2: rebuild scripts block, dedupe key); CI "no checks" retry loop của merge-batch2.sh hoạt động ổn định — tái sử dụng.
 - PM env status: Telegram ✅ Gemini ✅ Supabase Seoul ✅ tokens ✅ — còn Shopee App ID/Secret (đang chờ duyệt).
 
+## 6.13 SESSION-4 CLOSE-OUT (2026-10-27, HR)
+
+**Round 4 (P5-1..4) MERGE XONG — #36 deal channel, #37 3 cron Shopee, #38 telegram:webhook, #39 short link. 0 open PR, CI main xanh.**
+
+- Tool giờ **khép kín bằng code**: radar → match → draft → duyệt Telegram → comment → postback → sync tiền → deal channel tự đăng (preview mặc định, nút Đăng/Bỏ qua).
+- vercel.json đủ 6 cron: health*/10, reconcile*/30, shopee products/conversions/validated, deal-poster 11:30+20:30 VN.
+- T-SHOPEE-04/07/08 đã có route (credential-gated skip 200); T-SHOPEE-06 đã làm (P5-4) — chờ SHOPEE-CRED để chạy thật.
+- PM còn lại (ngoài code): Shopee App ID/Secret, Telegram channel + bot admin + TELEGRAM_CHANNEL_ID, deploy VPS theo docs/DEPLOY.md.
+
 ---
-*Cập nhật lần cuối: 2026-10-26 (HR) — SESSION-3 CLOSE-OUT.*
+*Cập nhật lần cuối: 2026-10-27 (HR) — SESSION-4 CLOSE-OUT.*
