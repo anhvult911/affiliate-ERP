@@ -2,10 +2,16 @@ import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildTrackedAffiliateUrl } from "@/lib/worker/affiliate";
+import { ShopeeClient } from "@/lib/shopee/client";
+import { isShopeeConfigured, readShopeeConfig } from "@/lib/shopee/config";
+import { generateShortLink, originUrlFor, preferShortLink } from "@/lib/shopee/short-link";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 import { asStringArray } from "@/lib/json";
 
 export const dynamic = "force-dynamic";
+
+/** One mutation per claimed task is already 5 calls; a bigger batch keeps the query-string link. */
+const SHORT_LINK_MAX_PER_CLAIM = 5;
 
 const claimSchema = z.object({
   worker: z.string().trim().min(1, "Identify the worker.").max(64),
@@ -62,13 +68,44 @@ export async function POST(request: Request) {
       productIds.length > 0
         ? supabase
             .from("products")
-            .select("id,name,price,commission_rate,affiliate_short_link,review_images,pros_cons_summary")
+            .select("id,name,price,commission_rate,affiliate_short_link,origin_link,review_images,pros_cons_summary")
             .in("id", productIds)
         : Promise.resolve({ data: [], error: null })
     ]);
 
   if (accountsError || productsError) {
     return workerJson({ ok: false, error: (accountsError ?? productsError)?.message ?? "Lookup failed." }, 500);
+  }
+
+  // Shopee, when configured, mints a short link with the Sub_ID baked in — docs §4.2 says
+  // the query-string append is unverified for API-produced links. Best-effort and capped:
+  // a failed call (no credential, 10030, malformed response) keeps the existing tracked
+  // URL, and every task beyond the cap does too, so a slow API never stalls a claim.
+  const shortLinks = new Map<string, string>();
+
+  if (isShopeeConfigured()) {
+    const candidates = claimed.slice(0, SHORT_LINK_MAX_PER_CLAIM).filter((task) => {
+      const product = products?.find((row) => row.id === task.matched_product_id);
+      return Boolean(product && task.sub_id_code && originUrlFor(product));
+    });
+
+    const client = new ShopeeClient(readShopeeConfig());
+    const generated = await Promise.allSettled(
+      candidates.map(async (task) => {
+        const product = products!.find((row) => row.id === task.matched_product_id)!;
+        const link = await generateShortLink(client, {
+          originUrl: originUrlFor(product)!,
+          subId: task.sub_id_code!
+        });
+        return { taskId: task.id, link };
+      })
+    );
+
+    for (const outcome of generated) {
+      if (outcome.status === "fulfilled" && outcome.value.link) {
+        shortLinks.set(outcome.value.taskId, outcome.value.link);
+      }
+    }
   }
 
   const tasks = claimed.map((task) => {
@@ -93,9 +130,9 @@ export async function POST(request: Request) {
         ? {
             ...product,
             reviewImages: asStringArray(product.review_images),
-            trackedAffiliateUrl: buildTrackedAffiliateUrl(
-              product.affiliate_short_link,
-              task.sub_id_code
+            trackedAffiliateUrl: preferShortLink(
+              buildTrackedAffiliateUrl(product.affiliate_short_link, task.sub_id_code),
+              shortLinks.get(task.id) ?? null
             )
           }
         : null
