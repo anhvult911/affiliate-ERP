@@ -12,6 +12,8 @@ import { readFileSync } from "node:fs";
  * implement it. It exists now, and the README describes exactly what it does.
  */
 
+import { defaultEnvPaths, loadEnvFiles } from "./env.js";
+
 export type ProviderName = "gpm" | "genlogin" | "bitbrowser" | "local";
 export type ExecutorName = "facebook" | "fixture";
 
@@ -176,6 +178,14 @@ function readPackageVersion(): string {
 }
 
 export function loadConfig(): WorkerConfig {
+  // Every entry point (worker, login-check, scripts) must see .env.local: the CLI and
+  // the worker disagreeing about the token or the provider is how an operator ends up
+  // testing a different profile than the one that posts.
+  loadEnvFiles(defaultEnvPaths(), {
+    info: (message, context) => console.error(JSON.stringify({ level: "info", message, ...context })),
+    warn: (message, context) => console.error(JSON.stringify({ level: "warn", message, ...context }))
+  });
+
   const executorOverride = readFlag("executor");
   const dryRunOverride = readFlag("dry-run");
 

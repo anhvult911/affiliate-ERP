@@ -33,10 +33,21 @@ export class BitBrowserProvider implements AntidetectProvider {
       kind: "cdp",
       wsEndpoint,
       close: async () => {
-        // A failed close must not mask a successful post — log and continue.
-        await this.postJson("/browser/close", { id: profileId }, logger, "close").catch((error: unknown) => {
-          logger.warn("BitBrowser profile close failed", { profileId, error: String(error) });
-        });
+        // A failed close must not mask a successful post, but it must be visible: a
+        // profile left open eats one of the ten free slots until the client is restarted.
+        const closed = await this.postJson("/browser/close", { id: profileId }, logger, "close").catch(
+          (error: unknown) => {
+            logger.warn("BitBrowser profile close failed", { profileId, error: String(error) });
+            return null;
+          }
+        );
+
+        if (isRecord(closed) && closed.success === false) {
+          logger.warn("BitBrowser refused to close the profile — it may still be running", {
+            profileId,
+            message: String(closed.msg ?? closed.message ?? "no message")
+          });
+        }
       }
     };
   }
@@ -56,18 +67,35 @@ export class BitBrowserProvider implements AntidetectProvider {
     }
 
     const data = isRecord(body.data) ? body.data : {};
-    const direct = firstString(data, ["ws", "wsEndpoint", "webSocketDebuggerUrl"]) ?? findWebsocketEndpoint(data);
-    if (direct) return direct;
+    const direct =
+      firstString(data, ["ws", "wsEndpoint", "webSocketDebuggerUrl"]) ?? findWebsocketEndpoint(data);
+    if (direct) {
+      const accepted = this.acceptWebsocket(direct, logger, profileId);
+      if (accepted) return accepted;
+    }
 
     // Fallback: only an http debugger address came back → ask the browser itself.
+    // The address comes from a response body, so it is validated first: fetching it
+    // blindly would let anything answering on the API port point the worker at an
+    // internal address (metadata endpoints included) and hand it a websocket to drive.
     const httpAddress = firstString(data, ["http", "debuggerAddress", "httpEndpoint"]);
     if (httpAddress) {
-      const versionUrl = `${httpAddress.startsWith("http") ? httpAddress : `http://${httpAddress}`}/json/version`;
-      const version = await fetch(versionUrl, { signal: AbortSignal.timeout(15_000) })
-        .then((response) => (response.ok ? response.json() : null))
-        .catch(() => null);
-      const fromVersion = isRecord(version) ? firstString(version, ["webSocketDebuggerUrl"]) : null;
-      if (fromVersion) return fromVersion;
+      const debugUrl = this.debugUrl(httpAddress);
+      if (debugUrl) {
+        const version = await fetch(`${debugUrl.origin}/json/version`, {
+          signal: AbortSignal.timeout(15_000)
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null);
+        const fromVersion = isRecord(version) ? firstString(version, ["webSocketDebuggerUrl"]) : null;
+        const accepted = fromVersion ? this.acceptWebsocket(fromVersion, logger, profileId) : null;
+        if (accepted) return accepted;
+      } else {
+        logger.warn("BitBrowser returned a non-loopback debugger address — ignoring it", {
+          profileId,
+          address: httpAddress
+        });
+      }
     }
 
     logger.error("BitBrowser did not return a websocket endpoint", {
@@ -75,6 +103,49 @@ export class BitBrowserProvider implements AntidetectProvider {
       response: JSON.stringify(body).slice(0, 400)
     });
     throw invalidResponse(profileId, body);
+  }
+
+  /**
+   * A debugger address is only trusted when it is loopback: BitBrowser always serves
+   * its own profiles, and anything else means the API port is answering as someone else.
+   */
+  private debugUrl(address: string): URL | null {
+    const withScheme = /^https?:\/\//i.test(address) ? address : `http://${address}`;
+    try {
+      const url = new URL(withScheme);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+      return isLoopbackHost(url.hostname) ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Accepts a CDP websocket only if it points at the API host or at loopback. */
+  private acceptWebsocket(
+    candidate: string,
+    logger: OpenProfileOptions["logger"],
+    profileId: string
+  ): string | null {
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+        logger.warn("BitBrowser returned a non-websocket endpoint — ignoring it", { profileId });
+        return null;
+      }
+
+      const apiHost = new URL(this.apiUrl).hostname;
+      if (!isLoopbackHost(url.hostname) && url.hostname !== apiHost) {
+        logger.warn("BitBrowser returned a websocket for a foreign host — ignoring it", {
+          profileId,
+          host: url.hostname
+        });
+        return null;
+      }
+
+      return candidate;
+    } catch {
+      return null;
+    }
   }
 
   private async postJson(
@@ -115,6 +186,11 @@ export class BitBrowserProvider implements AntidetectProvider {
       return null;
     }
   }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "::1" || host === "127.0.0.1" || host.startsWith("127.");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

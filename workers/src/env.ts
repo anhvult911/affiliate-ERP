@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 
 /**
  * Loads the app's env files for the standalone worker process.
@@ -13,25 +13,54 @@ import { existsSync } from "node:fs";
  * want: a shell export (or Docker `--env`) beats the file. Called in order, later files
  * never override earlier ones because earlier values are already in the environment.
  */
-export function loadEnvFiles(paths: string[], logger?: { info: (message: string, context?: Record<string, unknown>) => void }): string[] {
+type EnvLogger = {
+  info: (message: string, context?: Record<string, unknown>) => void;
+  warn?: (message: string, context?: Record<string, unknown>) => void;
+};
+
+export function loadEnvFiles(paths: string[], logger?: EnvLogger): string[] {
   const loader = (process as NodeJS.Process & { loadEnvFile?: (path?: string) => void }).loadEnvFile;
   if (typeof loader !== "function") {
     // Node < 20.12: no built-in loader. The worker still runs with shell env only.
+    logger?.warn?.("this Node has no process.loadEnvFile — worker runs on shell env only", {
+      node: process.version
+    });
     return [];
   }
 
   const loaded: string[] = [];
   for (const path of paths) {
-    if (!existsSync(path)) continue;
-    loader.call(process, path);
-    loaded.push(path);
+    if (!isReadableFile(path)) continue;
+    try {
+      loader.call(process, path);
+      loaded.push(path);
+    } catch (error) {
+      // A directory named `.env.local`, a permission error or a malformed file must not
+      // take down the process before the logger exists — the worker can still run on
+      // shell env, and the operator needs to see why the file was ignored.
+      logger?.warn?.("env file could not be loaded", { path, error: String(error) });
+    }
   }
 
   if (loaded.length > 0) {
-    logger?.info("env files loaded", { files: loaded });
+    logger?.info?.("env files loaded", { files: loaded });
+  } else {
+    // The bug this module exists to fix was silence: say what was searched.
+    logger?.warn?.("no env file found — worker is running on shell environment only", {
+      searched: paths
+    });
   }
 
   return loaded;
+}
+
+/** existsSync() is true for directories too, which makes loadEnvFile throw EISDIR. */
+function isReadableFile(path: string): boolean {
+  try {
+    return existsSync(path) && statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**

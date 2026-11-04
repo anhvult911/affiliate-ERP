@@ -35,11 +35,14 @@ claim (atomic, server-side)  →  open the account's antidetect profile
 | `WORKER_API_TOKEN` | — | **Required.** Must match the app's value. |
 | `WORKER_NAME` | `worker-1` | Identity recorded on the claim; reports must come from the same name. |
 | `DRY_RUN` | `true` | See above. |
-| `ANTIDETECT_PROVIDER` | `local` | `gpm` \| `genlogin` \| `local`. |
+| `ANTIDETECT_PROVIDER` | `local` | `gpm` \| `genlogin` \| `bitbrowser` \| `local`. |
 | `EXECUTOR` | `facebook` | `facebook` (real) \| `fixture` (local test page). |
 | `POLL_INTERVAL_MS` | `15000` | Idle poll cadence. |
 | `MAX_PER_CLAIM` | `3` | Tasks claimed per cycle. |
-| `GPM_API_URL` / `GENLOGIN_API_URL` | `127.0.0.1:19995` / `:55555` | Local APIs of the antidetect tools. |
+| `GPM_API_URL` | `127.0.0.1:9495` | GPM-Login local API. |
+| `GENLOGIN_API_URL` | `127.0.0.1:55555` | GenLogin local API (Windows/macOS only). |
+| `BITBROWSER_API_URL` | `127.0.0.1:54345` | BitBrowser local API; the port is the client's `localServerAddress`. |
+| `BITBROWSER_API_KEY` | — | BitBrowser 7.x Local API token, sent as `x-api-key`. |
 | `LOCAL_PROFILE_DIR` | `./.profiles` | Chromium user-data dirs for the `local` provider. |
 | `EVIDENCE_DIR` | `./.evidence` | Screenshots taken before/after posting. |
 | `FIXTURE_URL` | auto | Fixture page; when unset the worker serves it itself. |
