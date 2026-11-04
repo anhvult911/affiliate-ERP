@@ -1,4 +1,5 @@
 import type { WorkerConfig } from "../config.js";
+import { BitBrowserProvider } from "./bitbrowser.js";
 import { GenloginProvider } from "./genlogin.js";
 import { GpmLoginProvider } from "./gpm.js";
 import { LocalProfileProvider } from "./local.js";
@@ -10,6 +11,8 @@ export function resolveProvider(config: WorkerConfig): AntidetectProvider {
       return new GpmLoginProvider(config.gpmApiUrl);
     case "genlogin":
       return new GenloginProvider(config.genloginApiUrl);
+    case "bitbrowser":
+      return new BitBrowserProvider(config.bitbrowserApiUrl);
     case "local":
       return new LocalProfileProvider(config.localProfileDir, config.browserChannel, config.browserHeadless);
   }

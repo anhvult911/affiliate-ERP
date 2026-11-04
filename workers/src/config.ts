@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
  * implement it. It exists now, and the README describes exactly what it does.
  */
 
-export type ProviderName = "gpm" | "genlogin" | "local";
+export type ProviderName = "gpm" | "genlogin" | "bitbrowser" | "local";
 export type ExecutorName = "facebook" | "fixture";
 
 export type WorkerConfig = {
@@ -28,6 +28,8 @@ export type WorkerConfig = {
   gpmApiUrl: string;
   /** Genlogin local API root. */
   genloginApiUrl: string;
+  /** BitBrowser local API root (free tier: 10 profiles with full API). */
+  bitbrowserApiUrl: string;
   /** Directory holding per-profile Chromium user data for the `local` provider. */
   localProfileDir: string;
   /** "chrome" uses the installed Chrome; empty uses Playwright's Chromium (containers). */
@@ -79,6 +81,7 @@ const DEFAULTS = {
   maxPerClaim: 3,
   gpmApiUrl: "http://127.0.0.1:9495",
   genloginApiUrl: "http://127.0.0.1:55555",
+  bitbrowserApiUrl: "http://127.0.0.1:54345",
   localProfileDir: "./.profiles",
   browserChannel: "chrome",
   browserHeadless: true,
@@ -180,7 +183,7 @@ export function loadConfig(): WorkerConfig {
     pollIntervalMs: readNumber("POLL_INTERVAL_MS", DEFAULTS.pollIntervalMs),
     maxPerClaim: readNumber("MAX_PER_CLAIM", DEFAULTS.maxPerClaim),
     dryRun: dryRunOverride ? dryRunOverride !== "false" : readBoolean("DRY_RUN", true),
-    provider: readEnum("ANTIDETECT_PROVIDER", ["gpm", "genlogin", "local"] as const, "local"),
+    provider: readEnum("ANTIDETECT_PROVIDER", ["gpm", "genlogin", "bitbrowser", "local"] as const, "local"),
     executor: readEnum(
       "EXECUTOR",
       ["facebook", "fixture"] as const,
@@ -188,6 +191,7 @@ export function loadConfig(): WorkerConfig {
     ),
     gpmApiUrl: readString("GPM_API_URL", DEFAULTS.gpmApiUrl).replace(/\/$/, ""),
     genloginApiUrl: readString("GENLOGIN_API_URL", DEFAULTS.genloginApiUrl).replace(/\/$/, ""),
+    bitbrowserApiUrl: readString("BITBROWSER_API_URL", DEFAULTS.bitbrowserApiUrl).replace(/\/$/, ""),
     localProfileDir: readString("LOCAL_PROFILE_DIR", DEFAULTS.localProfileDir),
     browserChannel: readString("BROWSER_CHANNEL", DEFAULTS.browserChannel),
     browserHeadless: readBoolean("BROWSER_HEADLESS", DEFAULTS.browserHeadless),
@@ -245,6 +249,6 @@ export function assertPostingAllowed(config: {
       "fingerprint masking, so every account on this machine shares one fingerprint. " +
       "Set ALLOW_LOCAL_POSTING=true if that is a deliberate, accepted risk " +
       "(see docs/REVIEW.md P2-1 and README → Execution worker), or use a fingerprint " +
-      "provider (gpm/genlogin), or keep DRY_RUN=true."
+      "provider (gpm/genlogin/bitbrowser), or keep DRY_RUN=true."
   );
 }
