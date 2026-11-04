@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import type { Tables, TablesInsert } from "@/lib/database.types";
-import { parseProductCsv } from "@/lib/products/parse-csv";
+import { parseProductCsv, type ParsedProduct } from "@/lib/products/parse-csv";
+import { parseProductLinks } from "@/lib/products/parse-links";
 import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -167,6 +168,48 @@ export async function importProductsCsv(
     return fail("File không có dòng dữ liệu nào.");
   }
 
+  return insertParsedProducts(products, parsed.data.defaultNiche?.trim() || null, issues);
+}
+
+const pasteLinksSchema = z.object({
+  links: z.string().trim().min(1, "Dán ít nhất một link Shopee affiliate."),
+  defaultNiche: z.string().trim().max(60).optional()
+});
+
+/**
+ * Creates products from pasted affiliate links, one per line.
+ *
+ * The eight-field form is fine once and hostile ten times: name and item id are
+ * already inside the Shopee URL, so the parser derives them and the operator only
+ * supplies what the link cannot know (`link | tên | giá | ngách`). Rows land with the
+ * same duplicate rules as the CSV import because both go through insertParsedProducts.
+ */
+export async function createProductsFromLinks(
+  input: unknown
+): Promise<ActionResult<ImportProductsResult>> {
+  const parsed = pasteLinksSchema.safeParse(input);
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const { products, issues } = parseProductLinks(parsed.data.links);
+  if (products.length === 0) {
+    return fail(issues[0]?.error ?? "Không đọc được link nào trong danh sách.");
+  }
+
+  return insertParsedProducts(products, parsed.data.defaultNiche?.trim() || null, issues);
+}
+
+/**
+ * Shared insert loop for both bulk paths.
+ *
+ * Rows are inserted one at a time so a single duplicate cannot roll back the rest of
+ * the batch; both existing products (by affiliate link or item id) and rows inside the
+ * batch are treated as duplicates and reported, not silently dropped.
+ */
+async function insertParsedProducts(
+  products: ParsedProduct[],
+  defaultNiche: string | null,
+  issues: { line: number; error: string }[]
+): Promise<ActionResult<ImportProductsResult>> {
   const supabase = await createSupabaseServerClient();
 
   // One query for the existing keys, instead of one per row.
@@ -184,7 +227,6 @@ export async function importProductsCsv(
   );
 
   const result: ImportProductsResult = { created: 0, skipped: 0, issues: [...issues] };
-  const defaultNiche = parsed.data.defaultNiche?.trim() || null;
 
   for (const product of products) {
     if (knownLinks.has(product.affiliateLink.toLowerCase())) {
