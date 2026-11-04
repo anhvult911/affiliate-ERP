@@ -17,17 +17,21 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
       <input type="hidden" name="next" value={nextPath} />
 
       <div className="grid gap-2">
-        <Label htmlFor="email">Email người vận hành (Operator)</Label>
+        <Label htmlFor="email">Tài khoản Operator</Label>
         <Input
           id="email"
           name="email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
+          type="text"
+          inputMode="text"
+          autoComplete="username"
           autoCapitalize="none"
+          spellCheck={false}
           required
-          placeholder="op@local.test"
+          placeholder="admin"
         />
+        <p className="text-muted-foreground text-xs">
+          Nhập tên đăng nhập (ví dụ <code className="font-mono">admin</code>) hoặc email đầy đủ.
+        </p>
       </div>
 
       <div className="grid gap-2">
