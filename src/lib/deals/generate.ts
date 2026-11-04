@@ -1,5 +1,6 @@
 import { draftDealPost, isGeminiConfigured } from "@/lib/ai/gemini";
 import { trimForTelegram, type DealProduct } from "@/lib/deals/copy";
+import { platformOf } from "@/lib/products/platform";
 
 /**
  * Best-effort AI caption for a deal post (P5-1).
@@ -11,10 +12,13 @@ import { trimForTelegram, type DealProduct } from "@/lib/deals/copy";
 export async function generateDealCaption(
   product: DealProduct & { niche?: string | null }
 ): Promise<string | null> {
-  if (!isGeminiConfigured()) return null;
-
   const link = product.affiliate_short_link?.trim() ?? "";
   if (!link) return null;
+
+  const platform = product.platform ?? platformOf(link);
+  if (platform !== "shopee") return null;
+
+  if (!isGeminiConfigured()) return null;
 
   try {
     const price =

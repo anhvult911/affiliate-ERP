@@ -86,3 +86,16 @@ test("a header-only file is rejected instead of inserting nothing silently", () 
   const { issues } = parseProductCsv("name,link");
   assert.match(issues[0]?.error ?? "", /ít nhất một dòng dữ liệu/);
 });
+
+test("a Lazada CSV row imports with the same item id the paste parser derives", () => {
+  const lazadaLink =
+    "https://www.lazada.vn/products/noi-chien-khong-dau-philips-hd9200-i1234567890-s9876543210.html";
+
+  const { products: csvProducts, issues: csvIssues } = parseProductCsv(
+    ["name,link", `Nồi chiên,${lazadaLink}`].join("\n")
+  );
+
+  assert.equal(csvIssues.length, 0);
+  assert.equal(csvProducts[0]?.shopeeItemId, "1234567890");
+  assert.equal(csvProducts[0]?.platform, "lazada");
+});
