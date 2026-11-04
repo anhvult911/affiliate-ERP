@@ -383,6 +383,11 @@ posts and hands every capture to `/api/worker/radar/ingest`. Matching, de-duplic
 and queueing stay server-side, so thresholds and prompts change without touching
 the process that drives browsers.
 
+The worker is not a Next.js process, so it loads env files itself at startup
+(`.env.local`, `.env`, then `workers/.env.local`, `workers/.env` in the repo root) —
+the same file the dev server reads. A shell export still wins over the file, and a
+missing file is skipped instead of aborting.
+
 ```bash
 RADAR_ENABLED=true RADAR_SOURCES_PER_CYCLE=3 DRY_RUN=false ANTIDETECT_PROVIDER=gpm pnpm worker:dev
 ```
