@@ -102,6 +102,17 @@ test("pipes still win over what the link says, and a Lazada link is labelled Laz
   assert.equal(rows[0]?.niche, "gia_dung");
 });
 
+test("an expired short code is reported as expired, not as a missing name", async () => {
+  const { impl } = stubFetch({
+    "https://s.shopee.vn/dead": [{ status: 301, location: "https://shope.ee/error_page" }]
+  });
+
+  const { rows } = await resolvePastedLinks("https://s.shopee.vn/dead", { fetchImpl: impl });
+
+  assert.match(rows[0]?.error ?? "", /hết hạn|error_page/);
+  assert.equal(rows[0]?.name, null);
+});
+
 test("platformOfLink separates the two marketplaces from anything else", () => {
   assert.equal(platformOfLink("https://shopee.vn/product/1/2"), "shopee");
   assert.equal(platformOfLink("https://shope.ee/x"), "shopee");
