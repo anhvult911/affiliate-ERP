@@ -34,7 +34,28 @@ export function loadEnvFiles(paths: string[], logger?: { info: (message: string,
   return loaded;
 }
 
+/**
+ * Finds the workspace root by walking up for a marker only the repo root has.
+ *
+ * `pnpm --filter affiliate-worker` runs the script with cwd set to `workers/`, so
+ * resolving env paths against `process.cwd()` looks for `workers/.env.local` and misses
+ * the root `.env.local` the operator actually edited. Both `pnpm-workspace.yaml` and
+ * `.git` exist only at the root, while `package.json` exists in both directories and is
+ * therefore useless as a marker.
+ */
+export function findRepoRoot(start = process.cwd(), maxDepth = 6): string {
+  let dir = start;
+  for (let depth = 0; depth <= maxDepth; depth += 1) {
+    if (existsSync(`${dir}/pnpm-workspace.yaml`) || existsSync(`${dir}/.git`)) return dir;
+    const parent = dir.replace(/[\\/][^\\/]+$/, "");
+    if (parent === dir || parent.length === 0) break;
+    dir = parent;
+  }
+  return start;
+}
+
 /** Default lookup: `.env.local` wins over `.env`, matching Next.js' own order. */
 export function defaultEnvPaths(cwd = process.cwd()): string[] {
-  return [`${cwd}/.env.local`, `${cwd}/.env`, `${cwd}/workers/.env.local`, `${cwd}/workers/.env`];
+  const root = findRepoRoot(cwd);
+  return [`${root}/.env.local`, `${root}/.env`, `${root}/workers/.env.local`, `${root}/workers/.env`];
 }
