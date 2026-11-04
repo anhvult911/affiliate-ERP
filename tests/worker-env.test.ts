@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { defaultEnvPaths, loadEnvFiles } from "../workers/src/env.js";
+import { mkdirSync } from "node:fs";
+
+import { defaultEnvPaths, findRepoRoot, loadEnvFiles } from "../workers/src/env.js";
 
 function makeProject(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "worker-env-"));
@@ -61,4 +63,26 @@ test("default lookup covers the repo root and workers/ directories", () => {
     "/repo/workers/.env.local",
     "/repo/workers/.env"
   ]);
+});
+
+test("running from workers/ still finds the root .env.local (pnpm --filter cwd)", () => {
+  const dir = makeProject({});
+  mkdirSync(join(dir, "workers"), { recursive: true });
+  writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - workers\n");
+  writeFileSync(join(dir, ".env.local"), "WORKER_API_TOKEN=from-root\n");
+  writeFileSync(join(dir, "workers", "package.json"), '{"name":"affiliate-worker"}');
+
+  try {
+    assert.equal(findRepoRoot(join(dir, "workers")), dir);
+
+    const paths = defaultEnvPaths(join(dir, "workers"));
+    assert.equal(paths[0], join(dir, ".env.local"));
+
+    delete process.env.WORKER_API_TOKEN;
+    loadEnvFiles(paths);
+    assert.equal(process.env.WORKER_API_TOKEN, "from-root");
+  } finally {
+    delete process.env.WORKER_API_TOKEN;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
