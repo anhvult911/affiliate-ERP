@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { Tables, TablesInsert } from "@/lib/database.types";
 import { parseProductCsv, type ParsedProduct } from "@/lib/products/parse-csv";
+import { resolvePastedLinks, type PreviewRow } from "@/lib/products/link-resolver";
 import { parseProductLinks } from "@/lib/products/parse-links";
 import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -198,6 +199,62 @@ export async function createProductsFromLinks(
   }
 
   return insertParsedProducts(products, parsed.data.defaultNiche?.trim() || null, issues);
+}
+
+const previewLinksSchema = z.object({
+  links: z.string().trim().min(1, "Dán ít nhất một link.").max(20_000, "Dán ít link hơn mỗi lần.")
+});
+
+/**
+ * Resolves pasted links for the review table (no writes).
+ *
+ * Short affiliate codes carry no product data, so each link is expanded through its
+ * redirect chain (Shopee's product page is not scrapable: JS app, captcha, 403 on the
+ * API). Whatever the chain reveals is pre-filled; the rest comes back `null` so the
+ * operator types one cell instead of filling the eight-field form.
+ */
+export async function previewProductLinks(input: unknown): Promise<ActionResult<PreviewRow[]>> {
+  const parsed = previewLinksSchema.safeParse(input);
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const { rows, issues } = await resolvePastedLinks(parsed.data.links);
+  if (rows.length === 0) {
+    return fail(issues[0]?.error ?? "Không đọc được link nào.");
+  }
+
+  return ok(rows);
+}
+
+const reviewRowSchema = z.object({
+  link: z.string().url("Link không hợp lệ."),
+  name: z.string().trim().min(1, "Mỗi dòng cần một tên sản phẩm.").max(200),
+  price: z.number().int().nonnegative().max(1_000_000_000_000).nullable(),
+  niche: z.string().trim().max(60).nullable(),
+  itemId: z.string().trim().max(40).nullable()
+});
+
+const reviewRowsSchema = z.object({
+  rows: z.array(reviewRowSchema).min(1, "Chưa có dòng nào để lưu.").max(100)
+});
+
+/** Saves the reviewed rows; same duplicate rules as CSV import and paste. */
+export async function createProductsFromRows(
+  input: unknown
+): Promise<ActionResult<ImportProductsResult>> {
+  const parsed = reviewRowsSchema.safeParse(input);
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const products: ParsedProduct[] = parsed.data.rows.map((row, index) => ({
+    line: index + 1,
+    name: row.name,
+    affiliateLink: row.link,
+    price: row.price,
+    commissionRate: null,
+    niche: row.niche?.trim() ? row.niche.trim() : null,
+    shopeeItemId: row.itemId?.trim() ? row.itemId.trim() : null
+  }));
+
+  return insertParsedProducts(products, null, []);
 }
 
 /**
