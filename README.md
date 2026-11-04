@@ -480,6 +480,22 @@ Chromium runs headless. Only the `local` provider is affected: the antidetect pr
 (`gpm`/`genlogin`) connect over CDP to a browser the tool started itself, so the worker's
 own display does not matter.
 
+### BitBrowser (free tier) as the zero-cost provider
+
+`ANTIDETECT_PROVIDER=bitbrowser` drives the [BitBrowser](https://www.bitbrowser.net)
+local API instead of GPM. Its free plan covers 10 profiles with the full API, which is
+enough for a 2-account seeding setup and needs no licence purchase. Behaviour matches the
+other providers: `POST /browser/open` returns a CDP websocket, the worker connects with
+Playwright, and `browser/close` runs on teardown.
+
+```bash
+ANTIDETECT_PROVIDER=bitbrowser
+BITBROWSER_API_URL="http://127.0.0.1:54345"   # default; read it from the client config
+```
+
+The client must be running (the API is served by the desktop app), and the port is
+whatever `localServerAddress` says in the client settings — never expose it publicly.
+
 ### GPM-Login on the same VPS
 
 GPM-Login has a Linux build and is the supported choice here; **GenLogin is
