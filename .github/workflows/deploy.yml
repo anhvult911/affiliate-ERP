@@ -31,6 +31,8 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          # Repo variable so a rebuilt box can live anywhere without editing this file.
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/affiliate-erp' }}
         run: |
           if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
             echo "DEPLOY_SSH_KEY / DEPLOY_HOST secrets are not configured" >&2
@@ -45,6 +47,16 @@ jobs:
           # across runs. Replace with a DEPLOY_KNOWN_HOSTS secret if the box is rebuilt.
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o BatchMode=yes deploy@$DEPLOY_HOST"
+
+          # A wrong DEPLOY_PATH must say so, with the real directory listing: otherwise
+          # the job fails with a bare "No such file or directory" and nothing to act on.
+          if ! $SSH "test -f '$DEPLOY_PATH/scripts/deploy-vps.sh'"; then
+            echo "deploy script not found at $DEPLOY_PATH/scripts/deploy-vps.sh" >&2
+            echo "set the DEPLOY_PATH repository variable to the real checkout (gh variable set DEPLOY_PATH --body <path>)" >&2
+            $SSH "ls -la '$DEPLOY_PATH' 2>&1 | head -20" >&2 || true
+            exit 1
+          fi
+
           # The script runs on the VPS, as `deploy`, and does its own rollback.
-          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes "deploy@$DEPLOY_HOST" \
-            "bash /opt/affiliate-erp/scripts/deploy-vps.sh origin/main"
+          $SSH "APP_DIR='$DEPLOY_PATH' bash '$DEPLOY_PATH/scripts/deploy-vps.sh' origin/main"
