@@ -33,6 +33,12 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # A leftover node_modules (e.g. the symlink that was committed by mistake in
+      # #49) makes pnpm fail with "File exists" while it builds its virtual store.
+      # The cache below only holds the pnpm store, never node_modules.
+      - name: Clean workspace leftovers
+        run: rm -rf node_modules .next
+
       # --frozen-lockfile: a PR that edits dependencies must also update the lockfile,
       # otherwise install fails here instead of on someone's machine.
       - name: Install
