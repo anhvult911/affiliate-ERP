@@ -28,11 +28,13 @@ test("empty input stays empty so the schema reports it", () => {
 });
 
 test("the form schema accepts a username and yields the email Supabase needs", () => {
-  const parsed = signInSchema.safeParse({ email: "admin", password: "Rubytony@2026" });
+  // Obvious placeholder: this repo is public, so a realistic-looking literal here reads
+  // as a leaked credential and trips the secret scanner.
+  const parsed = signInSchema.safeParse({ email: "admin", password: "test-password-not-real" });
 
   assert.equal(parsed.success, true);
   assert.equal(parsed.success && parsed.data.email, `admin@${DEFAULT_AUTH_EMAIL_DOMAIN}`);
-  assert.equal(parsed.success && parsed.data.password, "Rubytony@2026");
+  assert.equal(parsed.success && parsed.data.password, "test-password-not-real");
 });
 
 test("an email still parses, so existing operator accounts keep working", () => {
