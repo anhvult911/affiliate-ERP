@@ -17,7 +17,11 @@ import type { AntidetectProvider, BrowserSession, OpenProfileOptions } from "./t
 export class BitBrowserProvider implements AntidetectProvider {
   readonly name = "bitbrowser";
 
-  constructor(private readonly apiUrl: string) {}
+  constructor(
+    private readonly apiUrl: string,
+    /** Optional token from Settings → Browser Settings → Local API (7.x). */
+    private readonly apiKey: string | null = null
+  ) {}
 
   async openProfile({ profileId, logger }: OpenProfileOptions): Promise<BrowserSession> {
     const body = await this.postJson("/browser/open", { id: profileId }, logger, "open");
@@ -83,7 +87,10 @@ export class BitBrowserProvider implements AntidetectProvider {
     try {
       response = await fetch(`${this.apiUrl}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.apiKey ? { "x-api-key": this.apiKey } : {})
+        },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(60_000)
       });

@@ -11,7 +11,7 @@ function silentLogger(): Logger {
   return { debug: noop, info: noop, warn: noop, error: noop } as unknown as Logger;
 }
 
-type Call = { url: string; method: string; body: unknown };
+type Call = { url: string; method: string; body: unknown; headers: Record<string, string> };
 
 /** Installs a fetch stub that answers each URL from `routes` and records calls. */
 async function withFetch<T>(
@@ -23,7 +23,12 @@ async function withFetch<T>(
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: (init?.headers ?? {}) as Record<string, string>
+    });
 
     const key = Object.keys(routes).find((candidate) => url.startsWith(candidate));
     if (!key) throw new TypeError(`fetch failed: ${url}`);
@@ -100,6 +105,26 @@ test("falls back to /json/version when the response only carries an http address
       assert.equal(session.kind === "cdp" ? session.wsEndpoint : null, "ws://127.0.0.1:60123/devtools/browser/from-version");
     }
   );
+});
+
+test("sends the x-api-key header only when a Local API token is configured", async () => {
+  const routes = {
+    [`${API}/browser/open`]: { success: true, data: { ws: "ws://127.0.0.1:1/devtools/browser/y" } }
+  };
+
+  await withFetch(routes, async (calls) => {
+    await new BitBrowserProvider(API, "token-abc").openProfile({
+      profileId: "profile-4",
+      proxy: null,
+      logger: silentLogger()
+    });
+    assert.equal(calls[0]?.headers["x-api-key"], "token-abc");
+  });
+
+  await withFetch(routes, async (calls) => {
+    await new BitBrowserProvider(API).openProfile({ profileId: "profile-5", proxy: null, logger: silentLogger() });
+    assert.equal(calls[0]?.headers["x-api-key"], undefined);
+  });
 });
 
 test("a success:false response surfaces the client message", async () => {

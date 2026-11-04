@@ -493,6 +493,10 @@ ANTIDETECT_PROVIDER=bitbrowser
 BITBROWSER_API_URL="http://127.0.0.1:54345"   # default; read it from the client config
 ```
 
+BitBrowser 7.x can require Local API authentication (`Settings → Browser Settings → Local
+API` issues a token). Paste it into `BITBROWSER_API_KEY` and the worker sends it as the
+`x-api-key` header; leave it empty on builds without auth enabled.
+
 The client must be running (the API is served by the desktop app), and the port is
 whatever `localServerAddress` says in the client settings — never expose it publicly.
 
