@@ -12,7 +12,7 @@ export function resolveProvider(config: WorkerConfig): AntidetectProvider {
     case "genlogin":
       return new GenloginProvider(config.genloginApiUrl);
     case "bitbrowser":
-      return new BitBrowserProvider(config.bitbrowserApiUrl);
+      return new BitBrowserProvider(config.bitbrowserApiUrl, config.bitbrowserApiKey || null);
     case "local":
       return new LocalProfileProvider(config.localProfileDir, config.browserChannel, config.browserHeadless);
   }

@@ -30,6 +30,8 @@ export type WorkerConfig = {
   genloginApiUrl: string;
   /** BitBrowser local API root (free tier: 10 profiles with full API). */
   bitbrowserApiUrl: string;
+  /** Optional Local API token (BitBrowser 7.x: x-api-key). Empty disables the header. */
+  bitbrowserApiKey: string;
   /** Directory holding per-profile Chromium user data for the `local` provider. */
   localProfileDir: string;
   /** "chrome" uses the installed Chrome; empty uses Playwright's Chromium (containers). */
@@ -82,6 +84,7 @@ const DEFAULTS = {
   gpmApiUrl: "http://127.0.0.1:9495",
   genloginApiUrl: "http://127.0.0.1:55555",
   bitbrowserApiUrl: "http://127.0.0.1:54345",
+  bitbrowserApiKey: "",
   localProfileDir: "./.profiles",
   browserChannel: "chrome",
   browserHeadless: true,
@@ -192,6 +195,7 @@ export function loadConfig(): WorkerConfig {
     gpmApiUrl: readString("GPM_API_URL", DEFAULTS.gpmApiUrl).replace(/\/$/, ""),
     genloginApiUrl: readString("GENLOGIN_API_URL", DEFAULTS.genloginApiUrl).replace(/\/$/, ""),
     bitbrowserApiUrl: readString("BITBROWSER_API_URL", DEFAULTS.bitbrowserApiUrl).replace(/\/$/, ""),
+    bitbrowserApiKey: readString("BITBROWSER_API_KEY", DEFAULTS.bitbrowserApiKey),
     localProfileDir: readString("LOCAL_PROFILE_DIR", DEFAULTS.localProfileDir),
     browserChannel: readString("BROWSER_CHANNEL", DEFAULTS.browserChannel),
     browserHeadless: readBoolean("BROWSER_HEADLESS", DEFAULTS.browserHeadless),
