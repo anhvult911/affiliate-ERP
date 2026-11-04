@@ -51,6 +51,14 @@ test("reads the ITEM id from a numeric /product/<shopId>/<itemId> path, with que
   );
 });
 
+test("reads the item id from a live share link (/<shopSlug>/<shopId>/<itemId>)", () => {
+  const derived = describeShopeeLink(
+    "https://shopee.vn/opaanlp/729014007/52460495899?__mobile__=1&utm_medium=affiliates&mmp_pid=an_17363370592"
+  );
+  assert.equal(derived.itemId, "52460495899");
+  assert.equal(derived.name, null);
+});
+
 test("a short link yields nothing usable", () => {
   assert.deepEqual(describeShopeeLink("https://s.shopee.vn/abc123"), { name: null, itemId: null });
 });

@@ -125,6 +125,12 @@ export function describeAffiliateLink(link: string): AffiliateLinkDescription {
     // `/product/<shopId>/<itemId>` — no slug, the item id is still the last group.
     const numeric = /^\/product\/(\d+)\/(\d+)/.exec(parsed.pathname);
     if (numeric) return { name: null, itemId: numeric[2] ?? null, platform };
+
+    // `/<shopSlug>/<shopId>/<itemId>` — what a live affiliate share link redirects to
+    // (`shopee.vn/opaanlp/729014007/52460495899?...`). The last two segments are numeric
+    // in that order, so the item id is the final one.
+    const share = /^\/(?:[^/]+\/)?(\d+)\/(\d+)\/?$/.exec(parsed.pathname);
+    if (share) return { name: null, itemId: share[2] ?? null, platform };
   }
 
   if (platform === "lazada") {
