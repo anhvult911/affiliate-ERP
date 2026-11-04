@@ -32,7 +32,7 @@ https://s.shopee.vn/abc123 | Kệ nhựa 4 tầng | 249000 | decor`;
  * name and item id; `link | tên | giá | ngách` is only needed when the link is shortened
  * (s.shopee.vn) or the price matters for the copy.
  */
-function PasteLinksForm({ onDone }: { onDone: () => void }) {
+function PasteLinksForm({ onClose }: { onClose: () => void }) {
   const [links, setLinks] = useState("");
   const [defaultNiche, setDefaultNiche] = useState("");
   const [result, setResult] = useState<ImportProductsResult | null>(null);
@@ -44,23 +44,31 @@ function PasteLinksForm({ onDone }: { onDone: () => void }) {
     setResult(null);
 
     startTransition(async () => {
-      const outcome = await createProductsFromLinks({
-        links,
-        defaultNiche: defaultNiche || undefined
-      });
+      try {
+        const outcome = await createProductsFromLinks({
+          links,
+          defaultNiche: defaultNiche || undefined
+        });
 
-      if (!outcome.ok) {
-        setError(outcome.error);
-        toast.error(outcome.error);
-        return;
-      }
+        if (!outcome.ok) {
+          setError(outcome.error);
+          toast.error(outcome.error);
+          return;
+        }
 
-      setResult(outcome.data);
-      toast.success(`Đã tạo ${outcome.data.created} sản phẩm`);
+        setResult(outcome.data);
+        toast.success(`Đã tạo ${outcome.data.created} sản phẩm`);
 
-      if (outcome.data.created > 0) {
-        setLinks("");
-        if (outcome.data.issues.length === 0) onDone();
+        // Only clear when nothing failed: the issues quote line numbers, so wiping the
+        // textarea would destroy the only copy of the lines those numbers point at.
+        if (outcome.data.issues.length === 0) {
+          setLinks("");
+          onClose();
+        }
+      } catch {
+        const message = "Không gửi được yêu cầu — kiểm tra kết nối rồi thử lại.";
+        setError(message);
+        toast.error(message);
       }
     });
   }
@@ -122,7 +130,7 @@ function PasteLinksForm({ onDone }: { onDone: () => void }) {
       ) : null}
 
       <DialogFooter>
-        <Button type="button" variant="ghost" onClick={onDone}>
+        <Button type="button" variant="ghost" onClick={onClose}>
           Đóng
         </Button>
         <Button type="button" onClick={submit} disabled={pending || links.trim().length === 0}>
@@ -139,12 +147,19 @@ export function ProductCreateDialog() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("single");
 
+  // One close path for X, Escape, "Đóng" and a successful create: reopening always
+  // lands on the same mode instead of remembering whichever button was used last.
+  function requestClose() {
+    setOpen(false);
+    setMode("single");
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setMode("single");
+        if (next) setOpen(true);
+        else requestClose();
       }}
     >
       <DialogTrigger asChild>
@@ -183,9 +198,9 @@ export function ProductCreateDialog() {
         </div>
 
         {mode === "single" ? (
-          <ProductForm onSuccess={() => setOpen(false)} onCancel={() => setOpen(false)} />
+          <ProductForm onSuccess={requestClose} onCancel={requestClose} />
         ) : (
-          <PasteLinksForm onDone={() => setOpen(false)} />
+          <PasteLinksForm onClose={requestClose} />
         )}
       </DialogContent>
     </Dialog>

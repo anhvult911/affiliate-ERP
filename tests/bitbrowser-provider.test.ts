@@ -127,6 +127,92 @@ test("sends the x-api-key header only when a Local API token is configured", asy
   });
 });
 
+test("the Local API token never reaches a log line", async () => {
+  const logged: string[] = [];
+  const recording = {
+    debug: (message: string, context?: Record<string, unknown>) => logged.push(`${message} ${JSON.stringify(context ?? {})}`),
+    info: (message: string, context?: Record<string, unknown>) => logged.push(`${message} ${JSON.stringify(context ?? {})}`),
+    warn: (message: string, context?: Record<string, unknown>) => logged.push(`${message} ${JSON.stringify(context ?? {})}`),
+    error: (message: string, context?: Record<string, unknown>) => logged.push(`${message} ${JSON.stringify(context ?? {})}`)
+  } as unknown as Logger;
+
+  await withFetch(
+    { [`${API}/browser/open`]: { success: true, data: { ws: "ws://127.0.0.1:1/devtools/browser/z" } } },
+    async () => {
+      const session = await new BitBrowserProvider(API, "super-secret-token").openProfile({
+        profileId: "profile-6",
+        proxy: null,
+        logger: recording
+      });
+      await session.close();
+    }
+  );
+
+  assert.ok(logged.length > 0, "the provider should log something");
+  assert.equal(
+    logged.some((line) => line.includes("super-secret-token")),
+    false,
+    "the API token must never be logged"
+  );
+});
+
+test("close() reports a success:false body instead of pretending it closed", async () => {
+  const warnings: string[] = [];
+  const recording = {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: (message: string, context?: Record<string, unknown>) =>
+      warnings.push(`${message} ${JSON.stringify(context ?? {})}`),
+    error: () => undefined
+  } as unknown as Logger;
+
+  await withFetch(
+    {
+      [`${API}/browser/open`]: { success: true, data: { ws: "ws://127.0.0.1:1/devtools/browser/c" } },
+      [`${API}/browser/close`]: { success: false, msg: "profile not open" }
+    },
+    async () => {
+      const session = await new BitBrowserProvider(API).openProfile({
+        profileId: "profile-7",
+        proxy: null,
+        logger: recording
+      });
+      await session.close();
+    }
+  );
+
+  assert.equal(
+    warnings.some((line) => line.includes("profile not open")),
+    true,
+    "a refused close must be visible: it burns one of the free profile slots"
+  );
+});
+
+test("a websocket pointing at a foreign host is refused", async () => {
+  await withFetch(
+    { [`${API}/browser/open`]: { success: true, data: { ws: "ws://evil.example.com/devtools/browser/x" } } },
+    async () => {
+      await assert.rejects(
+        () =>
+          new BitBrowserProvider(API).openProfile({ profileId: "p", proxy: null, logger: silentLogger() }),
+        /no ws:\/\/ endpoint|no ws:\/\/ endpoint/
+      );
+    }
+  );
+});
+
+test("a non-loopback debugger address is never fetched", async () => {
+  await assert.rejects(
+    () =>
+      withFetch(
+        { [`${API}/browser/open`]: { success: true, data: { http: "169.254.169.254/latest" } } },
+        async () =>
+          new BitBrowserProvider(API).openProfile({ profileId: "p", proxy: null, logger: silentLogger() })
+      ),
+    /no ws:\/\/ endpoint|no ws:\/\/ endpoint/
+  );
+});
+
 test("a success:false response surfaces the client message", async () => {
   await withFetch(
     { [`${API}/browser/open`]: { success: false, msg: "profile not found" } },

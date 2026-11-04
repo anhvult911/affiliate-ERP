@@ -482,8 +482,11 @@ Rules of thumb on a 4 GB / 2 core box that already runs something else:
 
 A server has no display, so the default is `BROWSER_HEADLESS=true` and the bundled
 Chromium runs headless. Only the `local` provider is affected: the antidetect providers
-(`gpm`/`genlogin`) connect over CDP to a browser the tool started itself, so the worker's
-own display does not matter.
+(`gpm`/`genlogin`/`bitbrowser`) connect over CDP to a browser the tool started itself, so
+the worker's own display does not matter.
+
+The worker loads `.env.local`/`.env` itself (root first, then `workers/`), because it is a
+`tsx` process rather than a Next.js one; a shell export still wins over the file.
 
 ### BitBrowser (free tier) as the zero-cost provider
 

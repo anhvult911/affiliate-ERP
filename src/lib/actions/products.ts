@@ -172,7 +172,9 @@ export async function importProductsCsv(
 }
 
 const pasteLinksSchema = z.object({
-  links: z.string().trim().min(1, "Dán ít nhất một link Shopee affiliate."),
+  // 200 lines x ~2 KB per line: a Server Action is untrusted input, so the payload is
+  // capped before parsing rather than after building 200 objects from a 10 MB paste.
+  links: z.string().trim().min(1, "Dán ít nhất một link Shopee affiliate.").max(400_000, "Danh sách quá dài — chia nhỏ ra dán."),
   defaultNiche: z.string().trim().max(60).optional()
 });
 
@@ -264,7 +266,12 @@ async function insertParsedProducts(
       continue;
     }
 
-    result.issues.push({ line: product.line, error: error.message });
+    // Never surface raw Postgres text to the operator; 23505 is handled above, and
+    // everything else is either a constraint we can explain or an internal failure.
+    result.issues.push({
+      line: product.line,
+      error: "Không lưu được dòng này — kiểm tra lại giá/tên rồi thử lại."
+    });
   }
 
   if (result.created > 0) revalidatePath("/products");

@@ -8,16 +8,18 @@ import type { ParsedProduct } from "./parse-csv";
  * leaves most of the rest blank anyway. Import CSV solves it only if the links are
  * already in a spreadsheet, which is the duplication the form was meant to avoid.
  *
- * So this parser accepts one link per line and fills what the link can prove:
- *   - name: derived from the Shopee slug (`/May-loc-khong-khi-Xiaomi-i.1.2` →
- *     "May loc khong khi Xiaomi"),
- *   - shopee item id: the `i.<itemId>.<shopId>` segment or a numeric `/product/<id>/`
- *     path,
- *   - price and niche: only when the operator appends them.
- *
  * Line grammar (all optional parts after the link):
  *     <link> | <name> | <price> | <niche>
+ *
  * Short links (`s.shopee.vn/abc`) carry no slug, so they need at least a name.
+ *
+ * Two rules here are load-bearing and easy to get wrong:
+ *   - Shopee URLs are `...-i.<shopId>.<itemId>` and `/product/<shopId>/<itemId>`: the
+ *     **item** id is the LAST group. Taking the first stores a shop id in a UNIQUE
+ *     column, so two products from one shop collide and the Shopee product upsert then
+ *     writes price/commission from an unrelated product.
+ *   - Only known affiliate hosts are accepted, because the stored link is later opened
+ *     inside a browser profile that holds a logged-in Facebook session.
  */
 
 export type ParsedLinkProduct = ParsedProduct;
@@ -30,46 +32,89 @@ export type LinkParseResult = {
 };
 
 const MAX_LINES = 200;
-const HTTP_URL = /^https?:\/\//i;
+const MAX_LINE_LENGTH = 2_000;
+const MAX_NAME_LENGTH = 200;
+const MAX_NICHE_LENGTH = 60;
+const MAX_PRICE = 1_000_000_000_000;
 
-/** `150k`, `150K`, `150.000đ`, `150,000`, `150000` → 150000. */
+/**
+ * Hosts a pasted link may use. Keep in sync with the platforms the deal copy and the
+ * short-link service support; an unlisted host is rejected per line, never stored.
+ */
+export const ALLOWED_AFFILIATE_HOSTS = [
+  "shopee.vn",
+  "s.shopee.vn",
+  "shp.ee",
+  "shope.ee",
+  "lazada.vn",
+  "s.lazada.vn"
+] as const;
+
+/** `www.` and any subdomain of an allowed host count as that host. */
+export function isAllowedAffiliateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^www\./, "");
+  return ALLOWED_AFFILIATE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+}
+
+/** `150k`, `150.000đ`, `1.290.000`, `150000`, `0` → VND integer; anything else → null. */
 export function parsePrice(raw: string): number | null {
-  const cleaned = raw.trim().toLowerCase().replace(/[₫đ]/g, "").replace(/\s/g, "");
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[₫đ]/g, "")
+    .replace(/\s/g, "");
   if (cleaned.length === 0) return null;
 
   const withK = /^(\d+(?:[.,]\d+)?)k$/.exec(cleaned);
   const thousands = withK?.[1];
-  if (thousands) return Math.round(Number(thousands.replace(",", ".")) * 1000);
 
-  // Dots/commas are thousands separators in VN prices; strip them entirely.
-  const digits = cleaned.replace(/[.,]/g, "");
-  if (!/^\d+$/.test(digits)) return null;
+  let value: number;
+  if (thousands) {
+    value = Number(thousands.replace(",", ".")) * 1000;
+  } else {
+    // A separator followed by exactly three digits is a thousands group ("1.290.000");
+    // anything else is a decimal, and VND prices have no minor unit.
+    const normalized = cleaned.replace(/([.,])(\d{3})(?!\d)/g, "$2");
+    if (!/^\d+(?:[.,]\d+)?$/.test(normalized)) return null;
+    value = Number(normalized.replace(",", "."));
+  }
 
-  const value = Number(digits);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  if (!Number.isFinite(value) || value < 0 || value > MAX_PRICE) return null;
+  return Number.isInteger(value) ? value : null;
 }
 
-/** Extracts `{ name, itemId }` from a Shopee product URL; both may be null. */
+/** Extracts `{ name, itemId }` from a Shopee/Lazada product URL; both may be null. */
 export function describeShopeeLink(link: string): { name: string | null; itemId: string | null } {
-  let path: string;
+  let parsed: URL;
   try {
-    path = new URL(link).pathname;
+    parsed = new URL(link);
   } catch {
     return { name: null, itemId: null };
   }
 
-  const segment = decodeURIComponent(path.split("/").filter(Boolean).pop() ?? "");
+  if (!isAllowedAffiliateHost(parsed.hostname)) return { name: null, itemId: null };
+
+  const rawSegment = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
+  let segment: string;
+  try {
+    segment = decodeURIComponent(rawSegment);
+  } catch {
+    // Malformed percent-escape in pasted text: nothing here can be trusted, but the
+    // caller must still get a per-line issue rather than an exception out of the parser.
+    return { name: null, itemId: null };
+  }
   if (segment.length === 0) return { name: null, itemId: null };
 
+  // `Name-i.<shopId>.<itemId>` → item id is the last group.
   const itemMatch = /-i\.(\d+)\.(\d+)$/.exec(segment) ?? /^i\.(\d+)\.(\d+)$/.exec(segment);
   if (itemMatch) {
     const slug = segment.slice(0, itemMatch.index).replace(/[-_]+/g, " ").trim();
-    return { name: slug.length > 0 ? slug : null, itemId: itemMatch[1] ?? null };
+    return { name: slug.length > 0 ? slug : null, itemId: itemMatch[2] ?? null };
   }
 
-  // /product/<itemId>/<shopId> — no slug, but the id is explicit.
-  const numeric = /^\/product\/(\d+)\/(\d+)/.exec(path);
-  if (numeric) return { name: null, itemId: numeric[1] ?? null };
+  // `/product/<shopId>/<itemId>` — no slug, the item id is still the last group.
+  const numeric = /^\/product\/(\d+)\/(\d+)/.exec(parsed.pathname);
+  if (numeric) return { name: null, itemId: numeric[2] ?? null };
 
   // Short links (s.shopee.vn/abc123) carry an opaque code, nothing usable.
   return { name: null, itemId: null };
@@ -81,18 +126,35 @@ export function parseProductLinks(input: string): LinkParseResult {
   const seenLinks = new Set<string>();
   const seenItems = new Set<string>();
 
-  const lines = input.split(/\r?\n/).slice(0, MAX_LINES);
+  const allLines = input.split(/\r?\n/);
+  const lines = allLines.slice(0, MAX_LINES);
 
   lines.forEach((rawLine, index) => {
     const line = index + 1;
     const trimmed = rawLine.trim();
     if (trimmed.length === 0 || trimmed.startsWith("#")) return;
 
+    if (trimmed.length > MAX_LINE_LENGTH) {
+      issues.push({ line, error: "Dòng quá dài — mỗi dòng chỉ chứa một link." });
+      return;
+    }
+
     const parts = trimmed.split("|").map((part) => part.trim());
     const link = parts[0] ?? "";
 
-    if (!HTTP_URL.test(link)) {
-      issues.push({ line, error: "Dòng này không bắt đầu bằng http(s) — dán link Shopee affiliate." });
+    let hostname: string;
+    try {
+      hostname = new URL(link).hostname;
+    } catch {
+      issues.push({ line, error: "Dòng này không phải link http(s) hợp lệ." });
+      return;
+    }
+
+    if (!isAllowedAffiliateHost(hostname)) {
+      issues.push({
+        line,
+        error: `Link không thuộc Shopee/Lazada (${hostname}) — chỉ nhận link affiliate của 2 sàn.`
+      });
       return;
     }
 
@@ -109,8 +171,20 @@ export function parseProductLinks(input: string): LinkParseResult {
     if (!name) {
       issues.push({
         line,
-        error: "Link rút gọn không có tên sản phẩm — thêm vào sau dấu | (link | tên sản phẩm)."
+        error:
+          "Không đọc được tên từ link (link rút gọn hoặc ký tự mã hoá lỗi) — thêm tên sau dấu | (link | tên)."
       });
+      return;
+    }
+
+    if (name.length > MAX_NAME_LENGTH) {
+      issues.push({ line, error: `Tên sản phẩm dài quá ${MAX_NAME_LENGTH} ký tự.` });
+      return;
+    }
+
+    const niche = parts[3]?.trim() ?? "";
+    if (niche.length > MAX_NICHE_LENGTH) {
+      issues.push({ line, error: `Ngách dài quá ${MAX_NICHE_LENGTH} ký tự.` });
       return;
     }
 
@@ -119,13 +193,23 @@ export function parseProductLinks(input: string): LinkParseResult {
       return;
     }
 
+    const rawPrice = parts[2] ?? "";
+    const price = parsePrice(rawPrice);
+    if (rawPrice.trim().length > 0 && price === null) {
+      issues.push({
+        line,
+        error: `Giá "${rawPrice}" không đọc được (ví dụ hợp lệ: 150.000, 150k).`
+      });
+      return;
+    }
+
     products.push({
       line,
       name,
       affiliateLink: link,
-      price: parsePrice(parts[2] ?? ""),
+      price,
       commissionRate: null,
-      niche: parts[3]?.trim() || null,
+      niche: niche || null,
       shopeeItemId: derived.itemId
     });
 
@@ -133,8 +217,8 @@ export function parseProductLinks(input: string): LinkParseResult {
     if (derived.itemId) seenItems.add(derived.itemId);
   });
 
-  if (lines.length >= MAX_LINES) {
-    issues.push({ line: MAX_LINES, error: `Chỉ nhận tối đa ${MAX_LINES} dòng mỗi lần.` });
+  if (allLines.length > MAX_LINES) {
+    issues.push({ line: MAX_LINES + 1, error: `Chỉ nhận tối đa ${MAX_LINES} dòng mỗi lần.` });
   }
 
   return { products, issues };

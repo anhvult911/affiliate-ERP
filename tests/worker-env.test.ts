@@ -46,6 +46,17 @@ test("a shell export wins over the file (Next.js precedence)", () => {
   }
 });
 
+test("a directory named .env.local is skipped, not fatal", () => {
+  const dir = makeProject({});
+  mkdirSync(join(dir, ".env.local"), { recursive: true });
+
+  try {
+    assert.deepEqual(loadEnvFiles([join(dir, ".env.local")]), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("missing files are skipped instead of throwing", () => {
   const dir = makeProject({});
   try {

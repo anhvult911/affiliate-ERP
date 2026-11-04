@@ -2,7 +2,6 @@ import type { Page } from "playwright";
 
 import { WorkerApi, type ClaimedAccount, type ClaimedTask, type ScanAccount, type TaskReport, type WarmingReport, type WarmingSlot } from "./api.js";
 import { loadConfig, shouldClaimTasks, type WorkerConfig } from "./config.js";
-import { defaultEnvPaths, loadEnvFiles } from "./env.js";
 import { resolveTarget, runCommentFlow, type CommentTarget } from "./execution/index.js";
 import { resolveWarmingTarget, runWarmingSlot, type WarmingOutcome } from "./execution/warming.js";
 import { resolveProfileTarget, runProfileSetup } from "./execution/profile-setup.js";
@@ -42,11 +41,7 @@ type Deps = {
 };
 
 async function main(): Promise<void> {
-  // The worker is not a Next.js process: load .env.local/.env before reading config.
-  loadEnvFiles(defaultEnvPaths(), {
-    info: (message, context) => console.error(JSON.stringify({ level: "info", message, ...context }))
-  });
-
+  // loadConfig() loads .env.local/.env itself; the worker is not a Next.js process.
   const config = loadConfig();
   const logger = createLogger({
     worker: config.workerName,
