@@ -30,7 +30,12 @@ export type PreviewRow = {
   price: number | null;
   niche: string | null;
   itemId: string | null;
-  /** Set when the row cannot be saved yet (no name, blocked host, dead link). */
+  /**
+   * True when the link is fine but the product name is unknown (Shopee never serves it
+   * to a server). Not an error: the operator types it in the row and saves.
+   */
+  needsName: boolean;
+  /** Set only when the row is genuinely unusable (dead link, foreign host, bad price). */
   error: string | null;
 };
 
@@ -190,9 +195,6 @@ export async function resolvePastedLinks(
     if (!error && platform === "other") {
       error = "Link không thuộc Shopee/Lazada.";
     }
-    if (!error && !name) {
-      error = "Không đọc được tên từ link — nhập tên ở cột bên cạnh.";
-    }
     if (!error && raw.price && price === null) {
       error = `Giá "${raw.price}" không đọc được.`;
     }
@@ -206,6 +208,7 @@ export async function resolvePastedLinks(
       price,
       niche,
       itemId: derived.itemId,
+      needsName: !name,
       error
     });
   }

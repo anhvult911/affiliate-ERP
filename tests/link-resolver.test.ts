@@ -34,6 +34,7 @@ test("a short link that redirects to a slug URL auto-fills name and item id", as
   assert.equal(rows[0]?.name, "May loc khong khi Xiaomi Elite");
   assert.equal(rows[0]?.itemId, "222");
   assert.equal(rows[0]?.platform, "shopee");
+  assert.equal(rows[0]?.needsName, false);
   assert.equal(rows[0]?.finalUrl, "https://shopee.vn/May-loc-khong-khi-Xiaomi-Elite-i.111.222");
   assert.equal(visited.length, 1);
 });
@@ -47,7 +48,9 @@ test("a short link that lands on /product/<shop>/<item> fills the id but asks fo
 
   assert.equal(rows[0]?.itemId, "222");
   assert.equal(rows[0]?.name, null);
-  assert.match(rows[0]?.error ?? "", /nhập tên/);
+  // A missing name is not an error: the row is savable once the operator types it.
+  assert.equal(rows[0]?.error, null);
+  assert.equal(rows[0]?.needsName, true);
 });
 
 test("a redirect outside Shopee/Lazada is refused, not followed", async () => {
@@ -111,6 +114,7 @@ test("an expired short code is reported as expired, not as a missing name", asyn
 
   assert.match(rows[0]?.error ?? "", /hết hạn|error_page/);
   assert.equal(rows[0]?.name, null);
+  assert.equal(rows[0]?.needsName, true);
 });
 
 test("platformOfLink separates the two marketplaces from anything else", () => {

@@ -33,8 +33,10 @@ type Draft = {
   niche: string;
   itemId: string | null;
   platform: string;
-  /** What the resolver could not work out — shown, then cleared when the row is fixed. */
+  /** Blocking problem (dead link, foreign host): shown in red. */
   hint: string | null;
+  /** Link is fine, only the name is unknown: shown as a neutral prompt, not an error. */
+  needsName: boolean;
 };
 
 function toDraft(row: PreviewRow): Draft {
@@ -45,7 +47,8 @@ function toDraft(row: PreviewRow): Draft {
     niche: row.niche ?? "",
     itemId: row.itemId,
     platform: row.platform === "other" ? "?" : row.platform,
-    hint: row.error
+    hint: row.error,
+    needsName: row.needsName
   };
 }
 
@@ -91,8 +94,7 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
           ? {
               ...draft,
               ...patch,
-              // Filling the name resolves the only blocking hint.
-              hint: patch.name?.trim() ? null : draft.hint === null ? null : draft.hint
+              needsName: patch.name !== undefined ? patch.name.trim().length === 0 : draft.needsName
             }
           : draft
       )
@@ -203,6 +205,9 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
                 <p className="text-muted-foreground truncate text-[11px]">
                   {draft.platform} · {draft.itemId ? `#${draft.itemId}` : "chưa có mã"} · {draft.link}
                   {draft.hint ? <span className="text-destructive"> — {draft.hint}</span> : null}
+                  {!draft.hint && draft.needsName ? (
+                    <span className="text-amber-500"> — Shopee không trả tên, gõ tên vào ô bên trên</span>
+                  ) : null}
                 </p>
               </div>
               );
