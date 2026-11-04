@@ -179,6 +179,14 @@ export async function resolvePastedLinks(
     const niche = raw.niche || null;
 
     let error = result.error;
+
+    // Shopee answers a dead or expired affiliate code with 301 -> shope.ee/error_page.
+    // Saying "không đọc được tên" there sends the operator hunting for a product name
+    // when the link itself is unusable.
+    if (!error && /(^|\/)error_page(\/|$)/i.test(new URL(finalUrl).pathname)) {
+      error = "Link rút gọn đã hết hạn hoặc không còn hiệu lực (Shopee trả error_page).";
+    }
+
     if (!error && platform === "other") {
       error = "Link không thuộc Shopee/Lazada.";
     }
