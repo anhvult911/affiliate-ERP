@@ -1,3 +1,4 @@
+import { platformOf } from "@/lib/products/platform";
 import type { ShopeeClient } from "@/lib/shopee/client";
 
 /**
@@ -75,6 +76,10 @@ export async function generateShortLink(
   const subId = input.subId.trim();
   if (!originUrl || !subId) return null;
 
+  // Only Shopee links may be passed to Shopee's short-link API; everything else
+  // must keep its own affiliate link untouched.
+  if (platformOf(originUrl) !== "shopee") return null;
+
   try {
     const data = await client.query<{ generateShortLink?: { shortLink?: unknown } }>(
       SHORT_LINK_MUTATION,
@@ -95,4 +100,32 @@ export async function generateShortLink(
 /** Applies the API link when it exists, otherwise leaves the tracked URL untouched. */
 export function preferShortLink(trackedUrl: string, shortLink: string | null): string {
   return isUsableShortLink(shortLink) ? shortLink.trim() : trackedUrl;
+}
+
+/**
+ * Returns the affiliate link a task should use.
+ *
+ * - Shopee products: try to mint a fresh short link via `generateShortLink`;
+ *   fall back to the stored affiliate link.
+ * - Lazada / other products: never call the Shopee API and return the stored
+ *   affiliate link unchanged, so the Shopee shortener cannot mangle it.
+ */
+export async function resolveAffiliateShortLink(
+  client: ShopeeClient,
+  product: {
+    affiliate_short_link?: string | null;
+    origin_link?: string | null;
+  },
+  subId: string
+): Promise<string | null> {
+  const affiliate = product.affiliate_short_link?.trim() ?? "";
+  if (!affiliate) return null;
+
+  if (platformOf(affiliate) !== "shopee") return affiliate;
+
+  const originUrl = originUrlFor(product);
+  if (!originUrl || !subId.trim()) return affiliate;
+
+  const shortLink = await generateShortLink(client, { originUrl, subId });
+  return isUsableShortLink(shortLink) ? shortLink.trim() : affiliate;
 }

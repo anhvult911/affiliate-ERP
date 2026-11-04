@@ -29,10 +29,13 @@ export function formatVnd(value: number | string | null | undefined): string | n
   return `${grouped} ₫`;
 }
 
+import { platformOf } from "@/lib/products/platform";
+
 export type DealProduct = {
   name: string;
   price: number | string | null;
   affiliate_short_link: string | null;
+  platform?: "shopee" | "lazada" | "other";
 };
 
 /**
@@ -42,15 +45,19 @@ export type DealProduct = {
 export function buildDealCaption(product: DealProduct): string {
   const price = formatVnd(product.price);
   const link = product.affiliate_short_link?.trim() ?? "";
+  const platform = product.platform ?? platformOf(link);
+  const isLazada = platform === "lazada";
 
   return [
     `🔥 <b>${escapeHtml(product.name.trim())}</b>`,
     "",
     ...(price ? [`💰 Giá: <b>${price}</b>`] : []),
-    "👉 Đặt hàng qua link này để ủng hộ kênh:",
+    isLazada
+      ? "👉 Đặt hàng Lazada qua link này để ủng hộ kênh:"
+      : "👉 Đặt hàng qua link này để ủng hộ kênh:",
     escapeHtml(link),
     "",
-    "#deal #shopee"
+    isLazada ? "#deal #lazada" : "#deal #shopee"
   ].join("\n");
 }
 

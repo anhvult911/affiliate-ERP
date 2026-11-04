@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createProduct, updateProduct } from "@/lib/actions/products";
 import type { Tables } from "@/lib/database.types";
 import { useFormAction } from "@/lib/hooks/use-form-action";
+import { platformOf } from "@/lib/products/platform";
 import type { ProductInput } from "@/lib/validations/product";
 
 const HTTP_URL = /^https?:\/\//i;
@@ -63,6 +64,9 @@ export function ProductForm({
   const [imageUrl, setImageUrl] = useState("");
   const [imageError, setImageError] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
+  const [platform, setPlatform] = useState<"shopee" | "lazada" | "other">(
+    platformOf(product?.affiliate_short_link ?? "")
+  );
 
   const onSuccessRef = useRef(onSuccess);
   useEffect(() => {
@@ -224,10 +228,15 @@ export function ProductForm({
           defaultValue={product?.affiliate_short_link ?? ""}
           placeholder="https://s.shopee.vn/..."
           aria-invalid={Boolean(fieldErrors?.affiliate_short_link?.[0])}
+          onChange={(event) => setPlatform(platformOf(event.target.value))}
         />
         {fieldErrors?.affiliate_short_link?.[0] ? (
           <p className="text-destructive text-xs">{fieldErrors.affiliate_short_link[0]}</p>
         ) : null}
+        <p className="text-muted-foreground text-xs">
+          Sàn: {" "}
+          {platform === "shopee" ? "Shopee" : platform === "lazada" ? "Lazada" : "Không xác định"}
+        </p>
       </div>
 
       <div className="grid gap-2">

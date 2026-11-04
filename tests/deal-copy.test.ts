@@ -73,3 +73,26 @@ test("the preview shows the caption plus a note, and nothing else is added", () 
   assert.ok(preview.startsWith(caption));
   assert.match(preview, /Bản nháp/);
 });
+
+test("a Lazada caption names Lazada and does not claim Shopee", () => {
+  const lazadaProduct = {
+    name: "Nồi chiên không dầu Philips HD9200",
+    price: 1_990_000,
+    affiliate_short_link: "https://www.lazada.vn/products/...html"
+  };
+  const caption = buildDealCaption(lazadaProduct);
+
+  assert.match(caption, /Lazada/);
+  assert.equal(caption.includes("Shopee"), false);
+  assert.match(caption, /#deal/);
+  assert.match(caption, /#lazada/);
+  assert.equal(caption.includes("#shopee"), false);
+});
+
+test("the Shopee caption keeps its exact current strings", () => {
+  const caption = buildDealCaption(PRODUCT);
+
+  assert.equal(caption.includes("Lazada"), false);
+  assert.match(caption, /👉 Đặt hàng qua link này để ủng hộ kênh:/);
+  assert.match(caption, /#deal #shopee/);
+});

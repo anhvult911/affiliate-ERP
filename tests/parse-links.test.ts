@@ -126,7 +126,8 @@ test("pipes fill what the link cannot: name, price, niche", () => {
     price: 249000,
     commissionRate: null,
     niche: "decor",
-    shopeeItemId: null
+    shopeeItemId: null,
+    platform: "shopee"
   });
 });
 
@@ -173,4 +174,28 @@ test("non-URL lines, blank lines and comments are handled", () => {
   assert.equal(products.length, 1);
   assert.equal(issues.length, 1);
   assert.equal(issues[0]?.line, 3);
+});
+
+const LAZADA_SLUG_URL =
+  "https://www.lazada.vn/products/noi-chien-khong-dau-philips-hd9200-i1234567890-s9876543210.html";
+
+test("derives the name and Lazada item id from a Lazada slug URL", () => {
+  const { products, issues } = parseProductLinks(LAZADA_SLUG_URL);
+
+  assert.equal(issues.length, 0);
+  assert.equal(products.length, 1);
+  assert.equal(products[0]?.name, "noi chien khong dau philips hd9200");
+  assert.equal(products[0]?.shopeeItemId, "1234567890");
+  assert.equal(products[0]?.platform, "lazada");
+});
+
+test("a Lazada short link without a name is reported, and with a name it imports", () => {
+  const withoutName = parseProductLinks("https://s.lazada.vn/s.abc123");
+  assert.equal(withoutName.products.length, 0);
+  assert.match(withoutName.issues[0]?.error ?? "", /rút gọn|mã hoá/);
+
+  const withName = parseProductLinks("https://s.lazada.vn/s.abc123 | Tên sản phẩm");
+  assert.equal(withName.products.length, 1);
+  assert.equal(withName.products[0]?.shopeeItemId, null);
+  assert.equal(withName.products[0]?.platform, "lazada");
 });
