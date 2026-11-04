@@ -174,7 +174,9 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
             <span>Ngách</span>
           </div>
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-            {drafts.map((draft, index) => (
+            {drafts.map((draft, index) => {
+              const firstMissingName = drafts.findIndex((row) => row.name.trim().length === 0);
+              return (
               <div key={`${draft.link}-${index}`} className="space-y-1">
                 <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2">
                   <Input
@@ -182,6 +184,7 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
                     onChange={(event) => update(index, { name: event.target.value })}
                     placeholder="Nhập tên sản phẩm"
                     aria-label={`Tên sản phẩm dòng ${index + 1}`}
+                    autoFocus={index === firstMissingName}
                   />
                   <Input
                     value={draft.price}
@@ -202,7 +205,8 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
                   {draft.hint ? <span className="text-destructive"> — {draft.hint}</span> : null}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
