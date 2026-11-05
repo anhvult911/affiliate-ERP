@@ -55,6 +55,14 @@ function elapsedMs(since: string | null, now: Date): number | null {
  * sent before the operator switched to `auto` keeps a live "Đăng" button in the chat, and
  * pressing it later would publish a product that is already on the channel.
  */
+/**
+ * The instant a product becomes postable again. Used as the guard in the atomic claim, so
+ * two concurrent runs cannot both decide "this row was never dealt".
+ */
+export function dealCooldownCutoff(now: Date, cooldownDays: number = DEAL_COOLDOWN_DAYS): string {
+  return new Date(now.getTime() - cooldownDays * 24 * 3_600_000).toISOString();
+}
+
 export function isDealCoolingDown(
   lastDealtAt: string | null,
   now: Date,
