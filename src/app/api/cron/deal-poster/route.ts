@@ -11,7 +11,7 @@ import {
 } from "@/lib/deals/copy";
 import { dealPreviewKeyboard } from "@/lib/deals/callbacks";
 import { generateDealCaption } from "@/lib/deals/generate";
-import { pickDealCandidates, type DealCandidateRow } from "@/lib/deals/selection";
+import { dealCooldownCutoff, pickDealCandidates, type DealCandidateRow } from "@/lib/deals/selection";
 import { isTelegramConfigured, sendToChat, telegramChatId } from "@/lib/telegram/api";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +88,7 @@ async function run(request: Request) {
   }
 
   const operatorChat = telegramChatId();
+  const cutoff = dealCooldownCutoff(now);
   let posted = 0;
   let previewed = 0;
   const failures: string[] = [];
@@ -97,16 +98,20 @@ async function run(request: Request) {
     const caption = resolveDealCaption(product as DealProduct, generated);
 
     if (config.mode === "auto") {
+      // Claim the row BEFORE posting. Two cron sources firing in the same minute (root
+      // crontab + /etc/cron.d) both read last_dealt_at = null and both posted — the channel
+      // then showed the same deal twice, four lines apart.
+      const claimed = await claim(db, product.id, "last_dealt_at", cutoff, now, caption);
+      if (!claimed) continue;
+
       const sent = await sendToChat(config.channelId, trimForTelegram(caption));
       if (!sent) {
+        // Give the row back so the next run can retry it; a Telegram failure is not a post.
+        await release(db, product.id, "last_dealt_at", product.last_dealt_at);
         failures.push(`${product.id}: Telegram refused the post (is the bot an admin of ${config.channelId}?)`);
         continue;
       }
 
-      await db
-        .from("products")
-        .update({ last_dealt_at: now.toISOString(), deal_caption: caption })
-        .eq("id", product.id);
       posted += 1;
       continue;
     }
@@ -116,19 +121,19 @@ async function run(request: Request) {
       break;
     }
 
+    // Same claim on the preview column: two runs must not send the operator two copies of
+    // the same draft.
+    const claimed = await claim(db, product.id, "deal_previewed_at", cutoff, now, caption);
+    if (!claimed) continue;
+
     const sent = await sendToChat(operatorChat, buildDealPreview(caption), dealPreviewKeyboard(product.id));
 
     if (!sent) {
+      await release(db, product.id, "deal_previewed_at", product.deal_previewed_at);
       failures.push(`${product.id}: could not reach the operator chat`);
       continue;
     }
 
-    // previewed_at, not last_dealt_at: nothing was published, but the evening run must not
-    // ask about the same product again.
-    await db
-      .from("products")
-      .update({ deal_previewed_at: now.toISOString(), deal_caption: caption })
-      .eq("id", product.id);
     previewed += 1;
   }
 
@@ -145,6 +150,55 @@ async function run(request: Request) {
     },
     { headers: { "cache-control": "no-store" } }
   );
+}
+
+type ClaimColumn = "last_dealt_at" | "deal_previewed_at";
+type Db = ReturnType<typeof adminDb>;
+
+/**
+ * Atomically takes a product for this run (compare-and-set on the timestamp column).
+ *
+ * Posting is not idempotent, so the guard has to be the write itself: the update only
+ * matches a row that is still outside its cooldown, and only the run that receives a row
+ * back may talk to Telegram. Doing it after the send (the old order) let two runs both read
+ * "never dealt" and publish the same product twice.
+ */
+async function claim(
+  db: Db,
+  productId: string,
+  column: ClaimColumn,
+  cutoff: string,
+  now: Date,
+  caption: string
+): Promise<boolean> {
+  // A computed key loses the generated row type, so the two columns are spelled out.
+  const stamped =
+    column === "last_dealt_at"
+      ? { last_dealt_at: now.toISOString(), deal_caption: caption }
+      : { deal_previewed_at: now.toISOString(), deal_caption: caption };
+
+  const { data, error } = await db
+    .from("products")
+    .update(stamped)
+    .eq("id", productId)
+    // Quote the timestamp: PostgREST stops parsing the value at a colon otherwise.
+    .or(`${column}.is.null,${column}.lt."${cutoff}"`)
+    .select("id");
+
+  if (error) return false;
+  return (data ?? []).length > 0;
+}
+
+/** Undo a claim when the send failed, so the next run can retry the product. */
+async function release(
+  db: Db,
+  productId: string,
+  column: ClaimColumn,
+  previous: string | null
+): Promise<void> {
+  const revert =
+    column === "last_dealt_at" ? { last_dealt_at: previous } : { deal_previewed_at: previous };
+  await db.from("products").update(revert).eq("id", productId);
 }
 
 export const GET = run;
