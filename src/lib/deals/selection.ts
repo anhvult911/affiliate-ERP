@@ -48,6 +48,22 @@ function elapsedMs(since: string | null, now: Date): number | null {
   return now.getTime() - at;
 }
 
+/**
+ * True while a product is still inside its cooldown window.
+ *
+ * Exported because the Telegram preview buttons are a second, older entry point: a preview
+ * sent before the operator switched to `auto` keeps a live "Đăng" button in the chat, and
+ * pressing it later would publish a product that is already on the channel.
+ */
+export function isDealCoolingDown(
+  lastDealtAt: string | null,
+  now: Date,
+  cooldownDays: number = DEAL_COOLDOWN_DAYS
+): boolean {
+  const elapsed = elapsedMs(lastDealtAt, now);
+  return elapsed !== null && elapsed < cooldownDays * 24 * 3_600_000;
+}
+
 export function pickDealCandidates(
   rows: DealCandidateRow[],
   options: DealSelectionOptions
