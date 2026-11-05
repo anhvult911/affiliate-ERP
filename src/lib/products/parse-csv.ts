@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { platformOf } from "./platform";
+
 /**
  * Parser for a Shopee/Lazada affiliate export.
  *
@@ -22,6 +24,7 @@ export type ParsedProduct = {
   commissionRate: number | null;
   niche: string | null;
   shopeeItemId: string | null;
+  platform: "shopee" | "lazada" | "other";
 };
 
 export type ProductCsvIssue = { line: number; error: string };
@@ -33,7 +36,7 @@ export type ProductCsvResult = {
 
 const MAX_ROWS = 500;
 
-const ALIASES: Record<keyof Omit<ParsedProduct, "line">, string[]> = {
+const ALIASES: Record<keyof Omit<ParsedProduct, "line" | "platform">, string[]> = {
   name: ["tên sản phẩm", "ten san pham", "product name", "name", "tên", "ten"],
   affiliateLink: [
     "link tiếp thị",
@@ -224,12 +227,19 @@ function parseRate(raw: string | undefined): number | null {
 }
 
 function itemIdFromLink(link: string): string | null {
-  const patterns = [/\/product\/(\d+)\/(\d+)/, /[?&]item_id=(\d+)/, /-i\.(\d+)\.(\d+)/];
+  const patterns = [
+    /\/product\/(\d+)\/(\d+)/,
+    /[?&]item_id=(\d+)/,
+    /-i\.(\d+)\.(\d+)/,
+    // Lazada slugs: `name-i<itemId>-s<skuId>.html`; the item id is the `-i` group.
+    /-i(\d+)(?:-s\d+)?\.html/i
+  ];
 
   for (const pattern of patterns) {
     const match = link.match(pattern);
     if (!match) continue;
     // Shopee URLs carry shopId then itemId; the item id is the last group.
+    // Lazada slugs have only one capturing group, which is the item id.
     return match[match.length - 1] ?? null;
   }
 
@@ -314,7 +324,8 @@ export function parseProductCsv(input: string): ProductCsvResult {
       niche: parsed.data.niche,
       shopeeItemId:
         (columns.shopeeItemId >= 0 ? (cells[columns.shopeeItemId] ?? "").trim() : "") ||
-        itemIdFromLink(parsed.data.affiliate_link)
+        itemIdFromLink(parsed.data.affiliate_link),
+      platform: platformOf(parsed.data.affiliate_link)
     });
   });
 

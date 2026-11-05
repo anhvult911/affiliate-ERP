@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Tables, TablesInsert } from "@/lib/database.types";
 import { parseProductCsv, type ParsedProduct } from "@/lib/products/parse-csv";
 import { resolvePastedLinks, type PreviewRow } from "@/lib/products/link-resolver";
+import { platformOf } from "@/lib/products/platform";
 import { parseProductLinks } from "@/lib/products/parse-links";
 import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -251,7 +252,8 @@ export async function createProductsFromRows(
     price: row.price,
     commissionRate: null,
     niche: row.niche?.trim() ? row.niche.trim() : null,
-    shopeeItemId: row.itemId?.trim() ? row.itemId.trim() : null
+    shopeeItemId: row.itemId?.trim() ? row.itemId.trim() : null,
+    platform: platformOf(row.link)
   }));
 
   return insertParsedProducts(products, null, []);

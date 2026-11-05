@@ -33,8 +33,10 @@ type Draft = {
   niche: string;
   itemId: string | null;
   platform: string;
-  /** What the resolver could not work out — shown, then cleared when the row is fixed. */
+  /** Blocking problem (dead link, foreign host): shown in red. */
   hint: string | null;
+  /** Link is fine, only the name is unknown: shown as a neutral prompt, not an error. */
+  needsName: boolean;
 };
 
 function toDraft(row: PreviewRow): Draft {
@@ -45,7 +47,8 @@ function toDraft(row: PreviewRow): Draft {
     niche: row.niche ?? "",
     itemId: row.itemId,
     platform: row.platform === "other" ? "?" : row.platform,
-    hint: row.error
+    hint: row.error,
+    needsName: row.needsName
   };
 }
 
@@ -91,8 +94,7 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
           ? {
               ...draft,
               ...patch,
-              // Filling the name resolves the only blocking hint.
-              hint: patch.name?.trim() ? null : draft.hint === null ? null : draft.hint
+              needsName: patch.name !== undefined ? patch.name.trim().length === 0 : draft.needsName
             }
           : draft
       )
@@ -174,7 +176,9 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
             <span>Ngách</span>
           </div>
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-            {drafts.map((draft, index) => (
+            {drafts.map((draft, index) => {
+              const firstMissingName = drafts.findIndex((row) => row.name.trim().length === 0);
+              return (
               <div key={`${draft.link}-${index}`} className="space-y-1">
                 <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2">
                   <Input
@@ -182,6 +186,7 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
                     onChange={(event) => update(index, { name: event.target.value })}
                     placeholder="Nhập tên sản phẩm"
                     aria-label={`Tên sản phẩm dòng ${index + 1}`}
+                    autoFocus={index === firstMissingName}
                   />
                   <Input
                     value={draft.price}
@@ -200,9 +205,13 @@ function PasteLinksForm({ onClose }: { onClose: () => void }) {
                 <p className="text-muted-foreground truncate text-[11px]">
                   {draft.platform} · {draft.itemId ? `#${draft.itemId}` : "chưa có mã"} · {draft.link}
                   {draft.hint ? <span className="text-destructive"> — {draft.hint}</span> : null}
+                  {!draft.hint && draft.needsName ? (
+                    <span className="text-amber-500"> — Shopee không trả tên, gõ tên vào ô bên trên</span>
+                  ) : null}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -5,7 +5,8 @@ import {
   generateShortLink,
   isUsableShortLink,
   originUrlFor,
-  preferShortLink
+  preferShortLink,
+  resolveAffiliateShortLink
 } from "@/lib/shopee/short-link";
 import type { ShopeeClient } from "@/lib/shopee/client";
 
@@ -114,5 +115,43 @@ test("an empty origin or Sub_ID never reaches the API", async () => {
 
   assert.equal(await generateShortLink(client, { originUrl: "", subId: "T-1" }), null);
   assert.equal(await generateShortLink(client, { originUrl: "https://shopee.vn/p-i.1.2", subId: "" }), null);
+  assert.equal(called, false);
+});
+
+test("generateShortLink never calls the Shopee API for a non-Shopee origin", async () => {
+  let called = false;
+  const client = {
+    query: async () => {
+      called = true;
+      return { generateShortLink: { shortLink: "https://shope.ee/x" } };
+    }
+  } as unknown as ShopeeClient;
+
+  const link = await generateShortLink(client, {
+    originUrl: "https://www.lazada.vn/products/p-i1-s2.html",
+    subId: "T-1"
+  });
+
+  assert.equal(link, null);
+  assert.equal(called, false);
+});
+
+test("a Lazada product returns its own affiliate link untouched and never calls the API", async () => {
+  let called = false;
+  const client = {
+    query: async () => {
+      called = true;
+      return { generateShortLink: { shortLink: "https://shope.ee/x" } };
+    }
+  } as unknown as ShopeeClient;
+
+  const lazadaLink = "https://www.lazada.vn/products/noi-chien-i123-s456.html";
+  const link = await resolveAffiliateShortLink(
+    client,
+    { affiliate_short_link: lazadaLink },
+    "T-1"
+  );
+
+  assert.equal(link, lazadaLink);
   assert.equal(called, false);
 });

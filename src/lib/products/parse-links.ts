@@ -1,4 +1,5 @@
 import type { ParsedProduct } from "./parse-csv";
+import { platformOf } from "./platform";
 
 /**
  * Bulk creation from pasted affiliate links.
@@ -83,16 +84,23 @@ export function parsePrice(raw: string): number | null {
   return Number.isInteger(value) ? value : null;
 }
 
-/** Extracts `{ name, itemId }` from a Shopee/Lazada product URL; both may be null. */
-export function describeShopeeLink(link: string): { name: string | null; itemId: string | null } {
+export type AffiliateLinkDescription = {
+  name: string | null;
+  itemId: string | null;
+  platform: "shopee" | "lazada" | "other";
+};
+
+/** Extracts `{ name, itemId, platform }` from a Shopee/Lazada product URL. */
+export function describeAffiliateLink(link: string): AffiliateLinkDescription {
   let parsed: URL;
   try {
     parsed = new URL(link);
   } catch {
-    return { name: null, itemId: null };
+    return { name: null, itemId: null, platform: "other" };
   }
 
-  if (!isAllowedAffiliateHost(parsed.hostname)) return { name: null, itemId: null };
+  const platform = platformOf(link);
+  if (platform === "other") return { name: null, itemId: null, platform };
 
   const rawSegment = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
   let segment: string;
@@ -101,23 +109,51 @@ export function describeShopeeLink(link: string): { name: string | null; itemId:
   } catch {
     // Malformed percent-escape in pasted text: nothing here can be trusted, but the
     // caller must still get a per-line issue rather than an exception out of the parser.
-    return { name: null, itemId: null };
-  }
-  if (segment.length === 0) return { name: null, itemId: null };
-
-  // `Name-i.<shopId>.<itemId>` → item id is the last group.
-  const itemMatch = /-i\.(\d+)\.(\d+)$/.exec(segment) ?? /^i\.(\d+)\.(\d+)$/.exec(segment);
-  if (itemMatch) {
-    const slug = segment.slice(0, itemMatch.index).replace(/[-_]+/g, " ").trim();
-    return { name: slug.length > 0 ? slug : null, itemId: itemMatch[2] ?? null };
+    return { name: null, itemId: null, platform };
   }
 
-  // `/product/<shopId>/<itemId>` — no slug, the item id is still the last group.
-  const numeric = /^\/product\/(\d+)\/(\d+)/.exec(parsed.pathname);
-  if (numeric) return { name: null, itemId: numeric[2] ?? null };
+  if (platform === "shopee") {
+    if (segment.length === 0) return { name: null, itemId: null, platform };
 
-  // Short links (s.shopee.vn/abc123) carry an opaque code, nothing usable.
-  return { name: null, itemId: null };
+    // `Name-i.<shopId>.<itemId>` → item id is the last group.
+    const itemMatch = /-i\.(\d+)\.(\d+)$/.exec(segment) ?? /^i\.(\d+)\.(\d+)$/.exec(segment);
+    if (itemMatch) {
+      const slug = segment.slice(0, itemMatch.index).replace(/[-_]+/g, " ").trim();
+      return { name: slug.length > 0 ? slug : null, itemId: itemMatch[2] ?? null, platform };
+    }
+
+    // `/product/<shopId>/<itemId>` — no slug, the item id is still the last group.
+    const numeric = /^\/product\/(\d+)\/(\d+)/.exec(parsed.pathname);
+    if (numeric) return { name: null, itemId: numeric[2] ?? null, platform };
+
+    // `/<shopSlug>/<shopId>/<itemId>` — what a live affiliate share link redirects to
+    // (`shopee.vn/opaanlp/729014007/52460495899?...`). The last two segments are numeric
+    // in that order, so the item id is the final one.
+    const share = /^\/(?:[^/]+\/)?(\d+)\/(\d+)\/?$/.exec(parsed.pathname);
+    if (share) return { name: null, itemId: share[2] ?? null, platform };
+  }
+
+  if (platform === "lazada") {
+    // `slug-i<itemId>-s<skuId>.html` → item id is the `-i` group, not the sku.
+    const lazadaMatch = /-i(\d+)(?:-s\d+)?\.html$/i.exec(segment);
+    if (lazadaMatch) {
+      const slug = segment.slice(0, lazadaMatch.index).replace(/[-_]+/g, " ").trim();
+      return { name: slug.length > 0 ? slug : null, itemId: lazadaMatch[1] ?? null, platform };
+    }
+  }
+
+  // Short links carry an opaque code; the row can still be created if the operator
+  // pastes a name.
+  return { name: null, itemId: null, platform };
+}
+
+/**
+ * Compatibility alias used by older tests; returns the same `name` and `itemId`
+ * that `describeAffiliateLink` returns for Shopee/Lazada URLs.
+ */
+export function describeShopeeLink(link: string): { name: string | null; itemId: string | null } {
+  const { name, itemId } = describeAffiliateLink(link);
+  return { name, itemId };
 }
 
 export function parseProductLinks(input: string): LinkParseResult {
@@ -164,7 +200,7 @@ export function parseProductLinks(input: string): LinkParseResult {
       return;
     }
 
-    const derived = describeShopeeLink(link);
+    const derived = describeAffiliateLink(link);
     const explicitName = parts[1]?.trim() ?? "";
     const name = explicitName.length > 0 ? explicitName : derived.name;
 
@@ -210,7 +246,8 @@ export function parseProductLinks(input: string): LinkParseResult {
       price,
       commissionRate: null,
       niche: niche || null,
-      shopeeItemId: derived.itemId
+      shopeeItemId: derived.itemId,
+      platform: derived.platform
     });
 
     seenLinks.add(key);
