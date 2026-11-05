@@ -1,0 +1,50 @@
+name: Ops — diagnose SSH access
+
+# Chạy tay từ tab Actions. Dùng đúng secret DEPLOY_SSH_KEY/DEPLOY_HOST mà CD đang dùng,
+# nên nếu Deploy xanh thì job này cũng vào được box. Chỉ đọc, không sửa gì.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: SSH in as deploy and report
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o BatchMode=yes -o ConnectTimeout=15 deploy@$DEPLOY_HOST"
+
+          echo "===== danh tính ====="
+          $SSH 'whoami; id; hostname; uptime'
+
+          echo "===== sudo được gì ====="
+          $SSH 'sudo -n -l 2>&1 | head -30'
+
+          echo "===== quyền thư mục ubuntu ====="
+          $SSH 'ls -ld /home/ubuntu /home/ubuntu/.ssh 2>&1; ls -l /home/ubuntu/.ssh/authorized_keys 2>&1'
+
+          echo "===== trạng thái tài khoản ubuntu ====="
+          $SSH 'getent passwd ubuntu; sudo -n passwd -S ubuntu 2>&1 || echo "(cần root để xem passwd -S)"'
+
+          echo "===== entry authorized_keys của ubuntu (chỉ phần đầu mỗi dòng) ====="
+          $SSH 'sudo -n cut -c1-60 /home/ubuntu/.ssh/authorized_keys 2>&1 || cut -c1-60 /home/ubuntu/.ssh/authorized_keys 2>&1 || echo "(không đọc được)"'
+
+          echo "===== lỗi sshd gần nhất ====="
+          $SSH 'sudo -n tail -60 /var/log/auth.log 2>/dev/null | grep -iE "ubuntu|refused|bad ownership|locked|invalid user" | tail -25 || echo "(cần root để đọc auth.log)"'
+
+          echo "===== app + cron trên box ====="
+          $SSH 'systemctl is-active affiliate-app 2>/dev/null; systemctl list-timers --all --no-pager 2>/dev/null | grep -i affiliate || echo "(không có timer affiliate)"; crontab -l 2>/dev/null | grep -i deal || echo "(không có cron deal)"'
+
+          echo "===== disk ====="
+          $SSH 'df -h / | tail -1'
