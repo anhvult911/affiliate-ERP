@@ -4,6 +4,21 @@
 > Nguyên tắc: worker là container có `mem_limit` — không được phá resource những service cũ.
 > Monitor tuần đầu: `docker stats` + `htop`, cảnh báo nếu worker chạm >1.5GB kéo dài → tách VPS riêng.
 
+## 0. Lên lịch chạy (bắt buộc — nếu không kênh deal sẽ trống)
+
+VPS không có Vercel nên `vercel.json` cron **không tự chạy**. Không có bước này thì deal chỉ lên
+kênh khi có người chạy `curl` bằng tay — đúng tình trạng "3 sản phẩm trong DB, kênh 1 bài".
+
+```bash
+cd <thư mục checkout>          # vd: /opt/affiliate-erp
+sudo bash scripts/install-cron.sh
+tail -f /var/log/affiliate-cron.log     # xem từng lần gọi + HTTP code
+```
+
+Script ghi `/etc/cron.d/affiliate-erp` (idempotent, chạy lại vô hại) với:
+`health` mỗi 10' · `reconcile` mỗi 30' · Shopee sync 6h/1h/18h · **`deal-poster` 04:30 & 13:30 UTC**
+(= 11:30 & 20:30 VN). Secret đọc từ `.env.production` trên box, không truyền qua tham số.
+
 ## 1. Cài đặt (1 lần)
 
 ```bash
