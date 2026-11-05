@@ -15,6 +15,7 @@ import {
 } from "@/lib/telegram/api";
 import { isDealCallback, parseDealCallback } from "@/lib/deals/callbacks";
 import { buildDealCaption, escapeHtml, trimForTelegram } from "@/lib/deals/copy";
+import { isDealCoolingDown } from "@/lib/deals/selection";
 import { isAllowedChat, readUpdateChatId } from "@/lib/telegram/allowlist";
 import { buildQueueMessage, buildStatusMessage } from "@/lib/telegram/messages";
 import { loadPendingCaptures, loadStatusView } from "@/lib/telegram/queries";
@@ -217,7 +218,7 @@ async function handleDealCallback(
   const db = adminDb();
   const { data: product, error } = await db
     .from("products")
-    .select("id,name,price,affiliate_short_link,deal_caption")
+    .select("id,name,price,affiliate_short_link,deal_caption,last_dealt_at")
     .eq("id", productId)
     .maybeSingle();
 
@@ -228,6 +229,15 @@ async function handleDealCallback(
 
   if (!product.affiliate_short_link) {
     await answerCallbackQuery(query.id, "Sản phẩm không còn link affiliate");
+    return;
+  }
+
+  // A preview button can outlive its usefulness: send previews, switch to `auto`, and the
+  // old message still offers "Đăng". Refuse instead of publishing a second copy — the
+  // channel is public and duplicates are the fastest way to look like spam.
+  if (isDealCoolingDown(product.last_dealt_at, new Date())) {
+    await answerCallbackQuery(query.id, "Sản phẩm này vừa được đăng — không đăng trùng");
+    await settleMessage(query, "⚠️ <b>Đã bỏ qua</b> — sản phẩm này vừa lên kênh, không đăng trùng.");
     return;
   }
 
