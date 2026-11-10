@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Loads the app's env files for the standalone worker process.
@@ -86,5 +87,12 @@ export function findRepoRoot(start = process.cwd(), maxDepth = 6): string {
 /** Default lookup: `.env.local` wins over `.env`, matching Next.js' own order. */
 export function defaultEnvPaths(cwd = process.cwd()): string[] {
   const root = findRepoRoot(cwd);
-  return [`${root}/.env.local`, `${root}/.env`, `${root}/workers/.env.local`, `${root}/workers/.env`];
+  // join(), not template strings: on Windows the separator is `\`, and the worker's own
+  // tests compare these paths against path.join() results.
+  return [
+    join(root, ".env.local"),
+    join(root, ".env"),
+    join(root, "workers", ".env.local"),
+    join(root, "workers", ".env")
+  ];
 }
