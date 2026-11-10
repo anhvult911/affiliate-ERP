@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Inbox,
+  LayoutDashboard,
   Package,
   Radar,
   Sparkles,
@@ -24,6 +25,14 @@ export type NavItem = {
  * the bottom tab bar. Adding a module here wires all three surfaces.
  */
 export const NAV_ITEMS: NavItem[] = [
+  {
+    href: "/ops",
+    label: "Bảng điều hành",
+    module: "0",
+    description: "Trạng thái thật của radar, deal, kho và lịch chạy",
+    icon: LayoutDashboard,
+    mobilePrimary: false
+  },
   {
     href: "/queue",
     label: "Hàng đợi duyệt",
