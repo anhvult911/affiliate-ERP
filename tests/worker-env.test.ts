@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 
 import { mkdirSync } from "node:fs";
@@ -70,7 +70,7 @@ test("default lookup covers the repo root and workers/ directories", () => {
   // Built with join() rather than POSIX literals: on Windows the same four candidates are
   // "\\repo\\.env.local", so a hardcoded "/repo/..." array asserted the separator, not the
   // behaviour.
-  const root = resolve("/repo");
+  const root = "/repo";
   assert.deepEqual(defaultEnvPaths("/repo"), [
     join(root, ".env.local"),
     join(root, ".env"),
