@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   CRON_ENTRIES,
   deriveFreshness,
+  formatAge,
   formatVietnamTime,
   nextCronRun,
   type CronEntry
@@ -30,7 +31,9 @@ test("a stage past its cadence reads as overdue, and says by how much", () => {
     emptyLabel: "chưa chạy"
   });
   assert.equal(status.tone, "warn");
-  assert.match(status.detail, /giờ/);
+  // 135 minutes past the last run: reported in minutes, because rounding to hours here would
+  // overstate the budget the stage actually has.
+  assert.match(status.detail, /135 phút/);
 });
 
 test("no activity is idle, not a failure — the empty case must be named", () => {
@@ -53,6 +56,13 @@ test("a future timestamp is clock skew, not health", () => {
   });
   assert.equal(status.tone, "warn");
   assert.equal(status.label, "lệch giờ");
+});
+
+test("a 90-minute threshold is not rounded into '2 giờ'", () => {
+  // Rounding to hours doubles the apparent budget and hides a stage that is 30 minutes late.
+  assert.equal(formatAge(90), "90 phút");
+  assert.equal(formatAge(179), "179 phút");
+  assert.equal(formatAge(180), "3 giờ");
 });
 
 test("every-10-minutes cron lands on the next ten-minute boundary", () => {
