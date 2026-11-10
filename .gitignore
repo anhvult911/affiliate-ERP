@@ -33,3 +33,9 @@ workers/assets/**
 !workers/assets/README.md
 # generated at runtime
 tests/.tmp/
+
+# Loose credential files an operator may drop next to the code (e.g. the BitBrowser
+# local-API token). .env* is ignored above, but a bare file like this one was not.
+.bitbrowser-api-key
+*-api-key.txt
+*.api-key
