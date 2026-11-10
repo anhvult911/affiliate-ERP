@@ -56,7 +56,9 @@ export function deriveFreshness(args: {
 
 export function formatAge(minutes: number): string {
   if (minutes < 1) return "vừa xong";
-  if (minutes < 60) return `${Math.round(minutes)} phút`;
+  // Hours only once rounding cannot hide the difference: a 90-minute threshold rendered as
+  // "2 giờ" reads like the stage is allowed to be twice as stale as it is.
+  if (minutes < 180) return `${Math.round(minutes)} phút`;
   if (minutes < 60 * 24) return `${Math.round(minutes / 60)} giờ`;
   return `${Math.round(minutes / (60 * 24))} ngày`;
 }
