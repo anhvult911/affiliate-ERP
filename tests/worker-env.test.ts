@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { mkdirSync } from "node:fs";
@@ -67,12 +67,15 @@ test("missing files are skipped instead of throwing", () => {
 });
 
 test("default lookup covers the repo root and workers/ directories", () => {
-  const paths = defaultEnvPaths("/repo");
-  assert.deepEqual(paths, [
-    "/repo/.env.local",
-    "/repo/.env",
-    "/repo/workers/.env.local",
-    "/repo/workers/.env"
+  // Built with join() rather than POSIX literals: on Windows the same four candidates are
+  // "\\repo\\.env.local", so a hardcoded "/repo/..." array asserted the separator, not the
+  // behaviour.
+  const root = resolve("/repo");
+  assert.deepEqual(defaultEnvPaths("/repo"), [
+    join(root, ".env.local"),
+    join(root, ".env"),
+    join(root, "workers", ".env.local"),
+    join(root, "workers", ".env")
   ]);
 });
 
