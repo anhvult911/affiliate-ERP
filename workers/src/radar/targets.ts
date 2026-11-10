@@ -38,11 +38,60 @@ const POST_LINK_SELECTORS = [
   'a[href*="?fbid="]'
 ].join(", ");
 
-const POST_TEXT_SELECTORS = [
-  'div[data-ad-preview="message"]',
-  'div[data-ad-comet-preview="message"]',
-  'div[role="article"] div[dir="auto"]'
-].join(", ");
+/**
+ * One candidate read straight out of the DOM, before any normalisation.
+ *
+ * Split out so normalisation can be unit-tested without a browser: the parts that
+ * actually break in production (relative permalinks, duplicate anchors, lazy
+ * placeholder nodes) are pure string work.
+ */
+export type RawPostCandidate = {
+  href: string | null;
+  text: string;
+  images: string[];
+};
+
+/**
+ * Turns DOM candidates into posts the ingest endpoint can de-duplicate.
+ *
+ * `baseUrl` resolves relative hrefs; anything that is not a permalink is dropped.
+ */
+export function normaliseScrapedPosts(
+  candidates: RawPostCandidate[],
+  baseUrl: string
+): ScrapedPost[] {
+  const seen = new Map<string, ScrapedPost>();
+
+  for (const candidate of candidates) {
+    if (!candidate.href) continue;
+
+    let absolute: string;
+    try {
+      absolute = new URL(candidate.href, baseUrl).toString();
+    } catch {
+      continue;
+    }
+
+    if (!/\/posts\/|story_fbid|permalink|fbid=/.test(absolute)) continue;
+    if (seen.has(absolute)) continue;
+
+    // Facebook renders image alt text and "Facebook" link labels into textContent.
+    // They arrive concatenated ("FacebookFacebookFacebook"), so a \b boundary never
+    // matches: only runs of two or more are stripped, leaving a genuine mention alone.
+    const content = candidate.text
+      .replace(/(?:Facebook\s*){2,}/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
+    const images = [...new Set(candidate.images)].slice(0, 4);
+
+    if (content.length === 0 && images.length === 0) continue;
+
+    seen.set(absolute, { postUrl: absolute, content, images });
+  }
+
+  return [...seen.values()];
+}
 
 export const facebookRadarTarget: RadarTarget = {
   name: "facebook",
@@ -52,55 +101,43 @@ export const facebookRadarTarget: RadarTarget = {
   },
 
   async extract(page, source, logger) {
-    const seen = new Map<string, ScrapedPost>();
+    // Read the whole feed in one round-trip. Two things made the previous
+    // element-by-element version useless against live Facebook:
+    //   * `innerText` returns the loading skeleton ("Facebook Facebook ..."), not the
+    //     post, because the feed hides text from the layout tree;
+    //   * `div[role="article"]` is no longer the post container, so the ancestor climb
+    //     landed on empty nodes.
+    // `textContent` on each child of `div[role="feed"]` returns the real author, time
+    // and body in one string.
+    const candidates = await page.evaluate(
+      ({ linkSelector }) => {
+        const feed = document.querySelector('div[role="feed"]');
+        const containers = feed
+          ? Array.from(feed.children)
+          : Array.from(document.querySelectorAll('div[role="article"]'));
 
-    const links = page.locator(POST_LINK_SELECTORS);
-    const count = Math.min(await links.count(), 40);
+        const out: RawPostCandidate[] = [];
+        for (const node of containers) {
+          const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+          // Virtualised feed renders empty wrappers for posts that are not loaded yet.
+          if (text.length < 20) continue;
 
-    for (let index = 0; index < count; index += 1) {
-      const link = links.nth(index);
-      const href = await link.getAttribute("href").catch(() => null);
-      if (!href) continue;
+          const link = node.querySelector(linkSelector);
+          const images = Array.from(node.querySelectorAll('img[src^="https"]'))
+            .map((img) => img.getAttribute("src"))
+            .filter((src): src is string => typeof src === "string" && src.length > 0 && !src.includes("emoji"));
 
-      let absolute: string;
-      try {
-        absolute = new URL(href, source.url).toString();
-      } catch {
-        continue;
-      }
+          if (!link && images.length === 0) continue;
+          out.push({ href: link?.getAttribute("href") ?? null, text, images });
+        }
+        return out;
+      },
+      { linkSelector: POST_LINK_SELECTORS }
+    );
 
-      if (!/\/posts\/|story_fbid|permalink|fbid=/.test(absolute)) continue;
-      if (seen.has(absolute)) continue;
-
-      // The article ancestor holds both the text and the images of this post.
-      const article = link.locator('xpath=ancestor::div[@role="article"][1]');
-
-      const content = await article
-        .locator(POST_TEXT_SELECTORS)
-        .first()
-        .innerText({ timeout: 2_000 })
-        .catch(() => "");
-
-      const images = await article
-        .locator('img[src^="https"]')
-        .evaluateAll((nodes) =>
-          nodes
-            .map((node) => node.getAttribute("src"))
-            .filter((src): src is string => typeof src === "string" && src.length > 0 && !src.includes("emoji"))
-        )
-        .catch(() => [] as string[]);
-
-      if (content.trim().length === 0 && images.length === 0) continue;
-
-      seen.set(absolute, {
-        postUrl: absolute,
-        content: content.trim().slice(0, 4000),
-        images: [...new Set(images)].slice(0, 4)
-      });
-    }
-
-    logger.debug("scraped posts", { source: source.name, found: seen.size });
-    return [...seen.values()];
+    const posts = normaliseScrapedPosts(candidates, source.url);
+    logger.debug("scraped posts", { source: source.name, candidates: candidates.length, found: posts.length });
+    return posts;
   }
 };
 
