@@ -16,7 +16,7 @@ tail -f /var/log/affiliate-cron.log     # xem từng lần gọi + HTTP code
 ```
 
 Script ghi `/etc/cron.d/affiliate-erp` (idempotent, chạy lại vô hại) với:
-`health` mỗi 10' · `reconcile` mỗi 30' · Shopee sync 6h/1h/18h · **`deal-poster` 04:30 & 13:30 UTC**
+`health` mỗi 10' · `reconcile` mỗi 30' · Shopee sync 6h/1h/18h · `shopee-discover` 20:00 UTC (03:00 VN) · **`deal-poster` 04:30 & 13:30 UTC**
 (= 11:30 & 20:30 VN). Secret đọc từ `.env.production` trên box, không truyền qua tham số.
 
 ## 1. Cài đặt (1 lần)
