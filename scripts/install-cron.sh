@@ -45,6 +45,10 @@ APP_DIR=$APP_DIR
 0 * * * * root APP_DIR=$APP_DIR $CALL shopee-conversions >> $LOG 2>&1
 0 18 * * * root APP_DIR=$APP_DIR $CALL shopee-validated >> $LOG 2>&1
 
+# Keyword product discovery: fills the pool with items the sourcing groups actually discuss.
+# Separate from the 6-hourly offer sync, which imports the default list with no niche.
+0 20 * * * root APP_DIR=$APP_DIR $CALL shopee-discover >> $LOG 2>&1
+
 # The deal channel: 04:30 and 13:30 UTC = 11:30 and 20:30 Vietnam.
 30 4,13 * * * root APP_DIR=$APP_DIR $CALL deal-poster >> $LOG 2>&1
 EOF
