@@ -22,6 +22,7 @@ case "$endpoint" in
   shopee-products) path="cron/shopee/products" ;;
   shopee-conversions) path="cron/shopee/conversions" ;;
   shopee-validated) path="cron/shopee/validated" ;;
+  shopee-discover) path="cron/shopee/discover" ;;
   *)
     echo "unknown endpoint: $endpoint" >&2
     exit 2

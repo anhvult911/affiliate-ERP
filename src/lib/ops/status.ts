@@ -80,6 +80,7 @@ export const CRON_ENTRIES: CronEntry[] = [
   { name: "shopee-products", label: "Đồng bộ sản phẩm Shopee", path: "/api/cron/shopee/products", cadence: { kind: "daily", minute: 0, hours: [0, 6, 12, 18] } },
   { name: "shopee-conversions", label: "Đồng bộ đơn hàng Shopee", path: "/api/cron/shopee/conversions", cadence: { kind: "hourly", minute: 0 } },
   { name: "shopee-validated", label: "Đối soát Shopee", path: "/api/cron/shopee/validated", cadence: { kind: "daily", minute: 0, hours: [18] } },
+  { name: "shopee-discover", label: "Tìm sản phẩm theo từ khoá", path: "/api/cron/shopee/discover", cadence: { kind: "daily", minute: 0, hours: [20] } },
   { name: "deal-poster", label: "Đăng deal lên kênh", path: "/api/cron/deal-poster", cadence: { kind: "daily", minute: 30, hours: [4, 13] } }
 ];
 
