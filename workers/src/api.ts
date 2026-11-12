@@ -46,7 +46,7 @@ export type ClaimedTask = {
 
 export type TaskReport = {
   worker: string;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "dry_run";
   error?: string | null;
   executedAt?: string;
   /** Non-fatal observations the operator should still see. */
@@ -79,7 +79,7 @@ export type WarmingReport = {
   bioSet?: boolean;
   /** Set by the worker when it drove the local fixture rather than the platform. */
   sandbox?: boolean;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "dry_run";
   content?: string | null;
   postUrl?: string | null;
   targetAccountId?: string | null;

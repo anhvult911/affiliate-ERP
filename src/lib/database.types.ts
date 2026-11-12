@@ -457,7 +457,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "active"|"cooldown"|"checkpoint","conversion_status": "pending"|"settled"|"canceled","execution_mode": "single"|"seeding_2_accounts","social_platform": "facebook"|"instagram"|"tiktok"|"threads","source_type": "group"|"fanpage"|"kol"|"forum","task_status": "pending_approval"|"queued"|"running"|"completed"|"failed"|"rejected","warming_kind": "lifestyle_post"|"cross_warm"|"profile_setup","warming_status": "completed"|"failed"
+            "account_status": "active"|"cooldown"|"checkpoint","conversion_status": "pending"|"settled"|"canceled","execution_mode": "single"|"seeding_2_accounts","social_platform": "facebook"|"instagram"|"tiktok"|"threads","source_type": "group"|"fanpage"|"kol"|"forum","task_status": "pending_approval"|"queued"|"running"|"completed"|"failed"|"dry_run"|"rejected","warming_kind": "lifestyle_post"|"cross_warm"|"profile_setup","warming_status": "completed"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
