@@ -165,7 +165,8 @@ async function run(request: Request) {
     const now = new Date().toISOString();
     const rows = merged.map((offer) => ({
       ...toProductRow(offer, plan.niche),
-      sync_source: "discover",
+      // products_sync_source_check allows only 'csv' and 'api'; this route is the API lane.
+      sync_source: "api",
       last_synced_at: now
     }));
 
