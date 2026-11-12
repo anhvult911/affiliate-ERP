@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 const reportSchema = z.object({
   /** Identifies the worker that claimed the task — a report without a matching claim is refused. */
   worker: z.string().trim().min(1, "Identify the worker.").max(64),
-  status: z.enum(["completed", "failed"]),
+  // `dry_run` = the composer was driven and nothing was submitted; a rehearsal, not a failure.
+  status: z.enum(["completed", "failed", "dry_run"]),
   error: z.string().trim().max(2000).nullish(),
   executedAt: z.string().datetime().optional(),
   /** Non-fatal observations (e.g. the link reply failed) — stored, never hidden. */
@@ -89,7 +90,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return workerJson({ ok: false, error: "Another report already closed this task." }, 409);
   }
 
-  if (task.assigned_account_id) {
+  // A rehearsal typed into the composer but touched nothing on Facebook, so it must not spend
+  // the account's 20-minute action gap or earn trust.
+  if (task.assigned_account_id && status !== "dry_run") {
     const accountPatch: {
       last_action_at: string;
       status?: "cooldown" | "checkpoint";

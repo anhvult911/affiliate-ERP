@@ -240,7 +240,9 @@ async function executeTask(task: ClaimedTask, deps: Deps): Promise<void> {
     }
 
     if (deps.config.dryRun) {
-      await report(deps, task, { status: "failed", error: "Dry run: nothing was posted." }, log);
+      // Rehearsal, not a failure: the composer was driven and nothing was submitted. Reporting
+      // it as `failed` made a working queue look broken and hid real errors among fake ones.
+      await report(deps, task, { status: "dry_run", note: "dry run: comment typed, not submitted" }, log);
       return;
     }
 

@@ -22,6 +22,7 @@ export const TASK_STATUSES = [
   "running",
   "completed",
   "failed",
+  "dry_run",
   "rejected"
 ] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -58,6 +59,7 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   running: "Đang chạy",
   completed: "Hoàn thành",
   failed: "Thất bại",
+  dry_run: "Chạy thử (chưa đăng)",
   rejected: "Đã từ chối"
 };
 
@@ -91,6 +93,7 @@ export const TASK_STATUS_TONE: Record<
   running: "info",
   completed: "success",
   failed: "destructive",
+  dry_run: "info",
   rejected: "muted"
 };
 
