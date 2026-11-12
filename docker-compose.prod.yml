@@ -14,6 +14,12 @@
 
 services:
   worker:
+    # Opt-in only. Posting happens on the operator's Windows PC, because that is where the
+    # antidetect browser (BitBrowser) and the logged-in Facebook sessions live. A worker on the
+    # VPS cannot reach either: it has no Chrome, no profile, no session — it just claims tasks
+    # and fails them (seen as claimed_by=worker-sg). Without `profiles`, every `compose up`
+    # during a deploy resurrects it, so it is kept behind a profile that nothing enables.
+    profiles: ["worker"]
     build:
       context: .
       dockerfile: workers/Dockerfile
