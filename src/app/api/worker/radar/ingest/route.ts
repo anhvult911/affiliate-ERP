@@ -31,7 +31,7 @@ const ingestSchema = z.object({
 type Candidate = { id: string; name: string; niche: string | null; pros_cons_summary: string | null };
 
 type Source = Pick<Tables<"target_sources">,
-  "id" | "name" | "source_type" | "niche" | "tone_of_voice" | "group_rules" | "is_active" | "keywords_json"
+  "id" | "name" | "source_type" | "capture_mode" | "niche" | "tone_of_voice" | "group_rules" | "is_active" | "keywords_json"
 >;
 
 /**
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
   let sourceQuery = supabase
     .from("target_sources")
-    .select("id,name,source_type,niche,tone_of_voice,group_rules,is_active,keywords_json")
+    .select("id,name,source_type,capture_mode,niche,tone_of_voice,group_rules,is_active,keywords_json")
     .eq("user_id", LEAD_OWNER_ID);
   sourceQuery = input.sourceId
     ? sourceQuery.eq("id", input.sourceId)
@@ -76,9 +76,17 @@ export async function POST(request: Request) {
   const postUrl = normalizePostUrl(input.postUrl);
   if (!source.is_active) return workerJson({ ok: true, created: false, paused: true });
 
-  const mode = source.source_type === "group" ? process.env.RADAR_GROUP_MODE?.trim() || "affiliate" : "affiliate";
+  // Routing is stored on the watchlist row, not a process env: different groups
+  // can feed the affiliate pipeline and the lead hunter at the same time. The
+  // DB check already constrains non-groups to affiliate; mirror it here so a
+  // legacy row or a direct service-role write cannot turn a fanpage into a lead.
+  const mode = source.source_type === "group" ? source.capture_mode : "affiliate";
   if (mode === "affiliate") return ingestAffiliate(supabase, source, input, postUrl);
-  if (mode !== "leads" && mode !== "both") return workerJson({ ok: false, error: "Invalid RADAR_GROUP_MODE." }, 503);
+  // Fail closed: a missing/unknown mode must not silently fall through to `both`,
+  // which would create leads and comment tasks the operator never opted into.
+  if (mode !== "leads" && mode !== "both") {
+    return workerJson({ ok: false, error: "Invalid capture_mode for this source." }, 500);
+  }
 
   const lead = captureGroupLead(supabase, source, postUrl, input.postContent ?? "", input.authorName ?? null);
   if (mode === "leads") {

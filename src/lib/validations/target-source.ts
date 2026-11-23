@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { SOURCE_TYPES } from "@/lib/constants";
+import { CAPTURE_MODES, SOURCE_TYPES } from "@/lib/constants";
 
 /** Empty strings (and absent fields) from form inputs mean "not provided". */
 const blankToUndefined = (value: unknown) => {
@@ -67,6 +67,10 @@ export const targetSourceSchema = z.object({
     .trim()
     .regex(/^https?:\/\//i, "URL must start with http:// or https://."),
   source_type: z.enum(SOURCE_TYPES),
+  // Optional so an update that omits it keeps the stored routing. The actions
+  // force `affiliate` for every non-group source, matching the DB check.
+  // `blankToUndefined` also covers a disabled capture select submitting null.
+  capture_mode: z.preprocess(blankToUndefined, z.enum(CAPTURE_MODES).optional()),
   niche: optionalText(120, "Niche must be 120 characters or fewer."),
   // Injected into the Gemini draft prompt so replies imitate the room.
   tone_of_voice: optionalText(500, "Tone of voice must be 500 characters or fewer."),

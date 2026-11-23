@@ -112,6 +112,7 @@ export type RadarSource = {
   name: string;
   url: string;
   source_type: string;
+  capture_mode: string;
   niche: string | null;
   scan_interval_mins: number;
   last_scanned_at: string | null;

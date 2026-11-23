@@ -247,14 +247,14 @@ isOneToOne: false
                   ]
                 },"target_sources": {
                   Row: {
-                    "created_at": string,"group_rules": string | null,"id": string,"is_active": boolean,"keywords_json": NonNullable<Json>,"last_scanned_at": string | null,"name": string,"niche": string | null,"scan_interval_mins": number,"source_type": Database["public"]['Enums']["source_type"],"tone_of_voice": string | null,"updated_at": string,"url": string,"user_id": string
+                    "capture_mode": Database["public"]['Enums']["source_capture_mode"],"created_at": string,"group_rules": string | null,"id": string,"is_active": boolean,"keywords_json": NonNullable<Json>,"last_scanned_at": string | null,"name": string,"niche": string | null,"scan_interval_mins": number,"source_type": Database["public"]['Enums']["source_type"],"tone_of_voice": string | null,"updated_at": string,"url": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"group_rules"?: string | null,"id"?: string,"is_active"?: boolean,"keywords_json"?: NonNullable<Json>,"last_scanned_at"?: string | null,"name": string,"niche"?: string | null,"scan_interval_mins"?: number,"source_type": Database["public"]['Enums']["source_type"],"tone_of_voice"?: string | null,"updated_at"?: string,"url": string,"user_id"?: string
+                    "capture_mode"?: Database["public"]['Enums']["source_capture_mode"],"created_at"?: string,"group_rules"?: string | null,"id"?: string,"is_active"?: boolean,"keywords_json"?: NonNullable<Json>,"last_scanned_at"?: string | null,"name": string,"niche"?: string | null,"scan_interval_mins"?: number,"source_type": Database["public"]['Enums']["source_type"],"tone_of_voice"?: string | null,"updated_at"?: string,"url": string,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"group_rules"?: string | null,"id"?: string,"is_active"?: boolean,"keywords_json"?: NonNullable<Json>,"last_scanned_at"?: string | null,"name"?: string,"niche"?: string | null,"scan_interval_mins"?: number,"source_type"?: Database["public"]['Enums']["source_type"],"tone_of_voice"?: string | null,"updated_at"?: string,"url"?: string,"user_id"?: string
+                    "capture_mode"?: Database["public"]['Enums']["source_capture_mode"],"created_at"?: string,"group_rules"?: string | null,"id"?: string,"is_active"?: boolean,"keywords_json"?: NonNullable<Json>,"last_scanned_at"?: string | null,"name"?: string,"niche"?: string | null,"scan_interval_mins"?: number,"source_type"?: Database["public"]['Enums']["source_type"],"tone_of_voice"?: string | null,"updated_at"?: string,"url"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -493,7 +493,6 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "active"|"cooldown"|"checkpoint","conversion_status": "pending"|"settled"|"canceled","execution_mode": "single"|"seeding_2_accounts","lead_category": "sheets_excel"|"automation"|"other","lead_intent": "buyer_inquiry"|"help_needed"|"seller_promo"|"irrelevant","lead_status": "pending_review"|"new"|"replied"|"sent_freebie"|"bought_template"|"upsold_automation"|"ignored","social_platform": "facebook"|"instagram"|"tiktok"|"threads","source_type": "group"|"fanpage"|"kol"|"forum","task_status": "pending_approval"|"queued"|"running"|"completed"|"failed"|"dry_run"|"rejected","warming_kind": "lifestyle_post"|"cross_warm"|"profile_setup","warming_status": "completed"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never

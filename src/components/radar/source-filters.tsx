@@ -24,9 +24,17 @@ import {
   SheetTrigger
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { SOURCE_TYPE_LABEL, SOURCE_TYPES, type SourceType } from "@/lib/constants";
+import {
+  CAPTURE_MODE_LABEL,
+  CAPTURE_MODES,
+  SOURCE_TYPE_LABEL,
+  SOURCE_TYPES,
+  type CaptureMode,
+  type SourceType
+} from "@/lib/constants";
 
 type TypeFilter = SourceType | "all";
+type CaptureFilter = CaptureMode | "all";
 
 function FilterFields({
   idPrefix,
@@ -34,6 +42,8 @@ function FilterFields({
   onQueryChange,
   typeFilter,
   onTypeChange,
+  captureFilter,
+  onCaptureChange,
   activeOnly,
   onActiveChange
 }: {
@@ -42,6 +52,8 @@ function FilterFields({
   onQueryChange: (value: string) => void;
   typeFilter: TypeFilter;
   onTypeChange: (value: TypeFilter) => void;
+  captureFilter: CaptureFilter;
+  onCaptureChange: (value: CaptureFilter) => void;
   activeOnly: boolean;
   onActiveChange: (value: boolean) => void;
 }) {
@@ -76,6 +88,26 @@ function FilterFields({
         </Select>
       </div>
 
+      <div className="space-y-2 lg:w-56">
+        <Label htmlFor={`${idPrefix}-capture`}>Chế độ thu thập</Label>
+        <Select
+          value={captureFilter}
+          onValueChange={(value) => onCaptureChange(value as CaptureFilter)}
+        >
+          <SelectTrigger id={`${idPrefix}-capture`} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả chế độ</SelectItem>
+            {CAPTURE_MODES.map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {CAPTURE_MODE_LABEL[mode]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="flex min-h-11 items-center justify-between gap-2 rounded-md border px-3 lg:min-h-9 lg:w-auto lg:justify-start lg:gap-3">
         <Label htmlFor={`${idPrefix}-active`} className="text-sm">
           Chỉ nguồn đang chạy
@@ -98,6 +130,7 @@ export function SourceFilters() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const initialTypeParam = searchParams.get("type");
+  const initialCaptureParam = searchParams.get("capture");
 
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(
@@ -105,24 +138,41 @@ export function SourceFilters() {
       ? (initialTypeParam as SourceType)
       : "all"
   );
+  const [captureFilter, setCaptureFilter] = useState<CaptureFilter>(
+    initialCaptureParam && CAPTURE_MODES.includes(initialCaptureParam as CaptureMode)
+      ? (initialCaptureParam as CaptureMode)
+      : "all"
+  );
   const [activeOnly, setActiveOnly] = useState(searchParams.get("active") === "1");
 
   useEffect(() => {
     const nextType = searchParams.get("type");
+    const nextCapture = searchParams.get("capture");
     setQuery(searchParams.get("q") ?? "");
     setTypeFilter(
       nextType && SOURCE_TYPES.includes(nextType as SourceType)
         ? (nextType as SourceType)
         : "all"
     );
+    setCaptureFilter(
+      nextCapture && CAPTURE_MODES.includes(nextCapture as CaptureMode)
+        ? (nextCapture as CaptureMode)
+        : "all"
+    );
     setActiveOnly(searchParams.get("active") === "1");
   }, [searchParams]);
 
-  function navigate(nextQuery: string, nextType: TypeFilter, nextActiveOnly: boolean) {
+  function navigate(
+    nextQuery: string,
+    nextType: TypeFilter,
+    nextCapture: CaptureFilter,
+    nextActiveOnly: boolean
+  ) {
     const params = new URLSearchParams();
     const term = nextQuery.trim();
     if (term) params.set("q", term);
     if (nextType !== "all") params.set("type", nextType);
+    if (nextCapture !== "all") params.set("capture", nextCapture);
     if (nextActiveOnly) params.set("active", "1");
     const search = params.toString();
     // See account-filters: same-route client transitions were unreliable in
@@ -132,20 +182,22 @@ export function SourceFilters() {
 
   function applyFilters() {
     setMobileOpen(false);
-    navigate(query, typeFilter, activeOnly);
+    navigate(query, typeFilter, captureFilter, activeOnly);
   }
 
   function clearFilters() {
     setQuery("");
     setTypeFilter("all");
+    setCaptureFilter("all");
     setActiveOnly(false);
     setMobileOpen(false);
-    navigate("", "all", false);
+    navigate("", "all", "all", false);
   }
 
   const activeFilterCount =
     (searchParams.get("q") ? 1 : 0) +
     (searchParams.get("type") ? 1 : 0) +
+    (searchParams.get("capture") ? 1 : 0) +
     (searchParams.get("active") ? 1 : 0);
 
   return (
@@ -185,6 +237,8 @@ export function SourceFilters() {
                 onQueryChange={setQuery}
                 typeFilter={typeFilter}
                 onTypeChange={setTypeFilter}
+                captureFilter={captureFilter}
+                onCaptureChange={setCaptureFilter}
                 activeOnly={activeOnly}
                 onActiveChange={setActiveOnly}
               />
@@ -221,6 +275,8 @@ export function SourceFilters() {
           onQueryChange={setQuery}
           typeFilter={typeFilter}
           onTypeChange={setTypeFilter}
+          captureFilter={captureFilter}
+          onCaptureChange={setCaptureFilter}
           activeOnly={activeOnly}
           onActiveChange={setActiveOnly}
         />

@@ -28,7 +28,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createSource, updateSource } from "@/lib/actions/target-sources";
-import { SOURCE_TYPE_LABEL, SOURCE_TYPES } from "@/lib/constants";
+import {
+  CAPTURE_MODE_DESCRIPTION,
+  CAPTURE_MODE_LABEL,
+  CAPTURE_MODES,
+  SOURCE_TYPE_LABEL,
+  SOURCE_TYPES,
+  type CaptureMode,
+  type SourceType
+} from "@/lib/constants";
 import type { Tables } from "@/lib/database.types";
 import { useFormAction } from "@/lib/hooks/use-form-action";
 import { asStringArray } from "@/lib/json";
@@ -41,6 +49,7 @@ export type SourceFormSource = Pick<
   | "name"
   | "url"
   | "source_type"
+  | "capture_mode"
   | "niche"
   | "tone_of_voice"
   | "group_rules"
@@ -76,6 +85,8 @@ export function SourceFormDialog({
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [isActive, setIsActive] = useState(source?.is_active ?? true);
+  const [sourceType, setSourceType] = useState<SourceType>(source?.source_type ?? "group");
+  const [captureMode, setCaptureMode] = useState<CaptureMode>(source?.capture_mode ?? "affiliate");
   const [keywords, setKeywords] = useState(() => initialKeywords(source, mode));
   const { fieldErrors, error, pending, submit } = useFormAction(
     async (formData) => {
@@ -83,6 +94,7 @@ export function SourceFormDialog({
         name: formData.get("name"),
         url: formData.get("url"),
         source_type: formData.get("source_type"),
+        capture_mode: formData.get("capture_mode"),
         niche: formData.get("niche"),
         tone_of_voice: formData.get("tone_of_voice"),
         group_rules: formData.get("group_rules"),
@@ -111,8 +123,14 @@ export function SourceFormDialog({
   useEffect(() => {
     if (!open) return;
     setIsActive(source?.is_active ?? true);
+    setSourceType(source?.source_type ?? "group");
+    setCaptureMode(source?.capture_mode ?? "affiliate");
     setKeywords(initialKeywords(source, mode));
   }, [open, source, mode]);
+
+  // Non-group sources can never route leads; show the invariant in the form and
+  // let the server action re-assert it in case the select was bypassed.
+  const effectiveCaptureMode = sourceType === "group" ? captureMode : "affiliate";
 
   const fieldError = (field: string) => fieldErrors?.[field]?.[0];
 
@@ -179,7 +197,15 @@ export function SourceFormDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="source-type">Loại nguồn</Label>
-              <Select name="source_type" defaultValue={source?.source_type ?? "group"}>
+              <Select
+                name="source_type"
+                value={sourceType}
+                onValueChange={(value) => {
+                  const next = value as SourceType;
+                  setSourceType(next);
+                  if (next !== "group") setCaptureMode("affiliate");
+                }}
+              >
                 <SelectTrigger
                   id="source-type"
                   className="w-full"
@@ -217,6 +243,39 @@ export function SourceFormDialog({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="source-capture-mode">Chế độ thu thập</Label>
+            <Select
+              name="capture_mode"
+              value={effectiveCaptureMode}
+              onValueChange={(value) => setCaptureMode(value as CaptureMode)}
+              disabled={sourceType !== "group"}
+            >
+              <SelectTrigger
+                id="source-capture-mode"
+                className="w-full"
+                aria-invalid={Boolean(fieldError("capture_mode"))}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CAPTURE_MODES.map((captureModeOption) => (
+                  <SelectItem key={captureModeOption} value={captureModeOption}>
+                    {CAPTURE_MODE_LABEL[captureModeOption]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              {sourceType === "group"
+                ? CAPTURE_MODE_DESCRIPTION[effectiveCaptureMode]
+                : "Fanpage, KOL và diễn đàn luôn chạy chế độ Affiliate."}
+            </p>
+            {fieldError("capture_mode") ? (
+              <p className="text-destructive text-xs">{fieldError("capture_mode")}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="source-interval">Chu kỳ quét (phút)</Label>
             <Input
               id="source-interval"
@@ -244,7 +303,7 @@ export function SourceFormDialog({
                 <Label htmlFor="source-keywords">Từ khóa lọc nhu cầu</Label>
                 <p className="text-muted-foreground text-xs">
                   Mỗi dòng một từ khóa. Pipeline Lead Hunter chỉ phân loại bài viết khớp danh sách
-                  này; để trống nghĩa là không lọc.
+                  này; để trống sẽ tắt thu thập lead cho nguồn này.
                 </p>
               </div>
               <Button

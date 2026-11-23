@@ -12,12 +12,22 @@
 export const SOURCE_TYPES = ["group", "fanpage", "kol", "forum"] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
+/**
+ * Kept in sync with src/lib/constants.ts and the public.source_capture_mode
+ * enum. `null` on ParsedTarget means the file omitted the column: an update
+ * must then leave the stored value untouched, while an insert falls back to
+ * the DB default (affiliate).
+ */
+export const CAPTURE_MODES = ["affiliate", "leads", "both"] as const;
+export type CaptureMode = (typeof CAPTURE_MODES)[number];
+
 export type ParsedTarget = {
   /** 1-based line in the file (JSON: array index + 1) for error messages. */
   line: number;
   name: string;
   url: string;
   source_type: SourceType;
+  capture_mode: CaptureMode | null;
   niche: string | null;
   tone_of_voice: string | null;
   group_rules: string | null;
@@ -53,6 +63,12 @@ function normaliseInterval(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_INTERVAL ? parsed : null;
 }
 
+function normaliseCaptureMode(value: unknown): CaptureMode | null | "invalid" {
+  const raw = asString(value)?.toLowerCase();
+  if (raw === null || raw === undefined) return null;
+  return (CAPTURE_MODES as readonly string[]).includes(raw) ? (raw as CaptureMode) : "invalid";
+}
+
 function normaliseActive(value: unknown): boolean {
   const raw = asString(value)?.toLowerCase();
   // `?.` yields undefined for a missing value, not null.
@@ -80,12 +96,27 @@ export function parseTargetRow(
   const interval = normaliseInterval(row.scan_interval_mins ?? row.scanIntervalMins);
   if (interval === null) return { error: `scan_interval_mins must be 1..${MAX_INTERVAL}` };
 
+  const parsedCaptureMode = normaliseCaptureMode(row.capture_mode ?? row.captureMode);
+  if (parsedCaptureMode === "invalid") {
+    return { error: `capture_mode must be one of ${CAPTURE_MODES.join(", ")}` };
+  }
+
+  // Non-group sources only run affiliate matching. An omitted column becomes
+  // affiliate for them; an explicit leads/both is a file error, not a silent
+  // downgrade, so the operator can fix the export.
+  if (sourceType !== "group") {
+    if (parsedCaptureMode && parsedCaptureMode !== "affiliate") {
+      return { error: `capture_mode must be affiliate for ${sourceType} sources` };
+    }
+  }
+
   return {
     target: {
       line,
       name,
       url,
       source_type: sourceType,
+      capture_mode: sourceType === "group" ? parsedCaptureMode : "affiliate",
       niche: asString(row.niche),
       tone_of_voice: asString(row.tone_of_voice ?? row.toneOfVoice),
       group_rules: asString(row.group_rules ?? row.groupRules),

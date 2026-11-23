@@ -1,4 +1,4 @@
-import type { SourceType, TaskStatus } from "@/lib/constants";
+import type { CaptureMode, SourceType, TaskStatus } from "@/lib/constants";
 import type { Json, Tables } from "@/lib/database.types";
 import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -52,6 +52,7 @@ export type RadarActivityItem = {
 
 export type ListSourcesFilters = {
   sourceType?: SourceType;
+  captureMode?: CaptureMode;
   activeOnly?: boolean;
   /** Substring match over name and url. */
   query?: string;
@@ -75,6 +76,7 @@ export async function listSources(filters: ListSourcesFilters = {}): Promise<Sou
     .order("name", { ascending: true });
 
   if (filters.sourceType) query = query.eq("source_type", filters.sourceType);
+  if (filters.captureMode) query = query.eq("capture_mode", filters.captureMode);
   if (filters.activeOnly) query = query.eq("is_active", true);
 
   const term = filters.query?.trim().slice(0, 120);

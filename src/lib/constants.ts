@@ -13,6 +13,14 @@ export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 export const SOURCE_TYPES = ["group", "fanpage", "kol", "forum"] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
+/**
+ * Which consumer(s) a watchlist source feeds. Kept in sync with the
+ * public.source_capture_mode enum from 20261123150000_source_routing.sql.
+ * Only Facebook groups may be `leads` or `both`; every other type is affiliate.
+ */
+export const CAPTURE_MODES = ["affiliate", "leads", "both"] as const;
+export type CaptureMode = (typeof CAPTURE_MODES)[number];
+
 export const EXECUTION_MODES = ["single", "seeding_2_accounts"] as const;
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
@@ -51,6 +59,18 @@ export const SOURCE_TYPE_LABEL: Record<SourceType, string> = {
   fanpage: "Fanpage",
   kol: "KOL / KOC",
   forum: "Diễn đàn"
+};
+
+export const CAPTURE_MODE_LABEL: Record<CaptureMode, string> = {
+  affiliate: "Affiliate",
+  leads: "Lead",
+  both: "Affiliate + Lead"
+};
+
+export const CAPTURE_MODE_DESCRIPTION: Record<CaptureMode, string> = {
+  affiliate: "Khớp sản phẩm và tạo bản nháp bình luận.",
+  leads: "Chỉ phân loại bài viết và lưu vào Lead Hunter.",
+  both: "Vừa chấm điểm sản phẩm vừa thu thập lead."
 };
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {

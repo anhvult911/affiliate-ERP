@@ -7,6 +7,10 @@
  * Upserts by URL, so importing the same file twice updates instead of duplicating.
  * Rows that cannot be validated are skipped and listed with the reason; a 40-line export
  * with one typo still imports 39.
+ *
+ * Required: name, url, source_type. Optional: niche, tone_of_voice, group_rules,
+ * scan_interval_mins, is_active, capture_mode (affiliate|leads|both; groups
+ * only). Omitting capture_mode on an update keeps the value already stored.
  */
 import { existsSync, readFileSync } from "node:fs";
 
@@ -76,7 +80,11 @@ async function main(): Promise<number> {
       tone_of_voice: target.tone_of_voice,
       group_rules: target.group_rules,
       scan_interval_mins: target.scan_interval_mins,
-      is_active: target.is_active
+      is_active: target.is_active,
+      // Omitted mode stays absent: the update keeps the stored value and an
+      // insert falls back to the column default (affiliate). keywords_json is
+      // likewise untouched so re-importing a URL never wipes operator terms.
+      ...(target.capture_mode ? { capture_mode: target.capture_mode } : {})
     };
 
     if (existing) {

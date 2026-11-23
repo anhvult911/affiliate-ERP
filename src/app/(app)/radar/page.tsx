@@ -10,7 +10,7 @@ import { SourceFilters } from "@/components/radar/source-filters";
 import { SourceFormDialog } from "@/components/radar/source-form-dialog";
 import { SourceList } from "@/components/radar/source-list";
 import { Button } from "@/components/ui/button";
-import { SOURCE_TYPES, type SourceType } from "@/lib/constants";
+import { CAPTURE_MODES, SOURCE_TYPES, type CaptureMode, type SourceType } from "@/lib/constants";
 import { getRadarActivity, getSourceStats, listSources } from "@/lib/data/target-sources";
 import { formatNumber } from "@/lib/format";
 
@@ -31,11 +31,16 @@ export default async function RadarPage({
       ? (typeParam as SourceType)
       : undefined;
   const activeOnly = params.active === "1";
+  const captureParam = typeof params.capture === "string" ? params.capture : undefined;
+  const captureMode =
+    captureParam && CAPTURE_MODES.includes(captureParam as CaptureMode)
+      ? (captureParam as CaptureMode)
+      : undefined;
   const query = typeof params.q === "string" ? params.q.trim() : "";
-  const hasFilters = Boolean(sourceType || activeOnly || query);
+  const hasFilters = Boolean(sourceType || captureMode || activeOnly || query);
 
   const [sources, stats, activity] = await Promise.all([
-    listSources({ sourceType, activeOnly, query }),
+    listSources({ sourceType, captureMode, activeOnly, query }),
     getSourceStats(),
     getRadarActivity(8)
   ]);

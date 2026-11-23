@@ -15,6 +15,7 @@ import {
 import type { SourceListItem } from "@/lib/data/target-sources";
 import { formatHostname, formatNumber, formatRelative } from "@/lib/format";
 
+import { CaptureModeBadge } from "./capture-mode-badge";
 import { SourceActions } from "./source-actions";
 import { SourceActiveSwitch } from "./source-active-switch";
 import { SourceTypeBadge } from "./source-type-badge";
@@ -40,6 +41,7 @@ export function SourceList({ sources }: { sources: SourceListItem[] }) {
               <TableRow>
                 <TableHead className="pl-4">Source</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Capture</TableHead>
                 <TableHead>Niche</TableHead>
                 <TableHead className="text-right">Interval</TableHead>
                 <TableHead className="text-right">Captures</TableHead>
@@ -71,6 +73,9 @@ export function SourceList({ sources }: { sources: SourceListItem[] }) {
                     </TableCell>
                     <TableCell>
                       <SourceTypeBadge type={source.source_type} />
+                    </TableCell>
+                    <TableCell>
+                      <CaptureModeBadge mode={source.capture_mode} />
                     </TableCell>
                     <TableCell className="text-muted-foreground max-w-[160px] truncate">
                       {source.niche ?? "—"}
@@ -122,6 +127,7 @@ export function SourceList({ sources }: { sources: SourceListItem[] }) {
                 <p className="text-muted-foreground truncate text-xs">{source.url}</p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <SourceTypeBadge type={source.source_type} />
+                  <CaptureModeBadge mode={source.capture_mode} />
                   {source.niche ? (
                     <span className="text-muted-foreground text-xs">{source.niche}</span>
                   ) : null}

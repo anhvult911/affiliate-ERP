@@ -9,6 +9,7 @@ type SourceRow = {
   name: string;
   url: string;
   source_type: string;
+  capture_mode: string;
   niche: string | null;
   scan_interval_mins: number;
   last_scanned_at: string | null;
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("target_sources")
-    .select("id,name,url,source_type,niche,scan_interval_mins,last_scanned_at")
+    .select("id,name,url,source_type,capture_mode,niche,scan_interval_mins,last_scanned_at")
     .eq("user_id", LEAD_OWNER_ID)
     .eq("is_active", true)
     .order("last_scanned_at", { ascending: true, nullsFirst: true })

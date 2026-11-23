@@ -28,6 +28,7 @@ test("a complete JSON export parses", () => {
     name: "Nhóm A",
     url: "https://www.facebook.com/groups/a",
     source_type: "group",
+    capture_mode: null,
     niche: "me_bim",
     tone_of_voice: null,
     group_rules: null,
@@ -102,6 +103,51 @@ test("booleans accept the strings a spreadsheet produces", () => {
   assert.equal(truthy.target.is_active, true);
 });
 
+test("a group without capture_mode stays null so an update preserves the stored value", () => {
+  const parsed = parseTargetRow(
+    { name: "G", url: "https://x.test/g", source_type: "group" },
+    1
+  );
+
+  assert.ok("target" in parsed);
+  assert.equal(parsed.target.capture_mode, null);
+});
+
+test("groups accept all three capture modes", () => {
+  const base = { name: "G", url: "https://x.test/g", source_type: "group" };
+  for (const mode of ["affiliate", "leads", "both"] as const) {
+    const parsed = parseTargetRow({ ...base, capture_mode: mode }, 1);
+    assert.ok("target" in parsed);
+    assert.equal(parsed.target.capture_mode, mode);
+  }
+});
+
+test("an unknown capture_mode is a row error", () => {
+  const parsed = parseTargetRow(
+    { name: "G", url: "https://x.test/g", source_type: "group", capture_mode: "comments" },
+    1
+  );
+
+  assert.ok("error" in parsed);
+  assert.match(parsed.error, /capture_mode must be one of/);
+});
+
+test("non-group sources force affiliate and reject lead routing", () => {
+  const omitted = parseTargetRow(
+    { name: "P", url: "https://x.test/p", source_type: "fanpage" },
+    1
+  );
+  assert.ok("target" in omitted);
+  assert.equal(omitted.target.capture_mode, "affiliate");
+
+  const explicit = parseTargetRow(
+    { name: "P", url: "https://x.test/p", source_type: "fanpage", capture_mode: "leads" },
+    1
+  );
+  assert.ok("error" in explicit);
+  assert.match(explicit.error, /must be affiliate for fanpage/);
+});
+
 test("duplicate urls inside one file keep the first and report the rest", () => {
   const csv = [
     "name,url,source_type",
@@ -137,5 +183,9 @@ test("the bundled sample file parses cleanly", async () => {
   assert.deepEqual(
     result.targets.map((target) => target.source_type).sort(),
     ["fanpage", "group", "group"]
+  );
+  assert.deepEqual(
+    result.targets.map((target) => target.capture_mode),
+    ["affiliate", "both", "affiliate"]
   );
 });

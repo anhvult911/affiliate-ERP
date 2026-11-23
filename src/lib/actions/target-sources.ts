@@ -7,7 +7,8 @@ import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   targetSourceIdSchema,
-  targetSourceSchema
+  targetSourceSchema,
+  type TargetSourceInput
 } from "@/lib/validations/target-source";
 
 /** Duplicate URLs are rejected by the unique index — surface a field-level message. */
@@ -25,6 +26,17 @@ function revalidateRadar(sourceId?: string) {
   if (sourceId) revalidatePath(`/radar/${sourceId}`);
 }
 
+/**
+ * Non-group sources are always affiliate (mirrors the DB check). A group that
+ * omits the field on update keeps its stored mode instead of resetting it.
+ */
+function sourceWriteValues(input: TargetSourceInput) {
+  const { capture_mode, ...values } = input;
+
+  if (input.source_type !== "group") return { ...values, capture_mode: "affiliate" as const };
+  return capture_mode ? { ...values, capture_mode } : values;
+}
+
 export async function createSource(input: unknown): Promise<ActionResult> {
   const parsed = targetSourceSchema.safeParse(input);
   if (!parsed.success) return fromZodError(parsed.error);
@@ -32,7 +44,7 @@ export async function createSource(input: unknown): Promise<ActionResult> {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("target_sources")
-    .insert({ ...parsed.data, user_id: LEAD_OWNER_ID });
+    .insert({ ...sourceWriteValues(parsed.data), user_id: LEAD_OWNER_ID });
 
   if (error) return databaseError(error);
 
@@ -50,7 +62,7 @@ export async function updateSource(id: string, input: unknown): Promise<ActionRe
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("target_sources")
-    .update(parsed.data)
+    .update(sourceWriteValues(parsed.data))
     .eq("id", parsedId.data)
     .eq("user_id", LEAD_OWNER_ID);
 

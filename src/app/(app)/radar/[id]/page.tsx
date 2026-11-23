@@ -5,6 +5,7 @@ import { ChevronLeftIcon, ClockIcon, ExternalLinkIcon } from "lucide-react";
 
 import { CopyButton } from "@/components/patterns/copy-button";
 import { PageHeader } from "@/components/patterns/page-header";
+import { CaptureModeBadge } from "@/components/radar/capture-mode-badge";
 import { DeleteSourceDialog } from "@/components/radar/delete-source-dialog";
 import { MarkScannedButton } from "@/components/radar/mark-scanned-button";
 import { SourceActiveSwitch } from "@/components/radar/source-active-switch";
@@ -71,6 +72,7 @@ export default async function RadarSourcePage({
 
         <div className="flex flex-wrap items-center gap-2">
           <SourceTypeBadge type={source.source_type} />
+          <CaptureModeBadge mode={source.capture_mode} />
           {!source.is_active ? (
             <Badge variant="muted">Monitoring paused</Badge>
           ) : due ? (
