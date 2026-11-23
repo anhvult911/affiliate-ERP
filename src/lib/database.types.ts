@@ -493,6 +493,7 @@ isOneToOne: false
                            }
           }
           Enums: {
+            "account_status": "active"|"cooldown"|"checkpoint","conversion_status": "pending"|"settled"|"canceled","execution_mode": "single"|"seeding_2_accounts","lead_category": "sheets_excel"|"automation"|"other","lead_intent": "buyer_inquiry"|"help_needed"|"seller_promo"|"irrelevant","lead_status": "pending_review"|"new"|"replied"|"sent_freebie"|"bought_template"|"upsold_automation"|"ignored","social_platform": "facebook"|"instagram"|"tiktok"|"threads","source_capture_mode": "affiliate"|"leads"|"both","source_type": "group"|"fanpage"|"kol"|"forum","task_status": "pending_approval"|"queued"|"running"|"completed"|"failed"|"dry_run"|"rejected","warming_kind": "lifestyle_post"|"cross_warm"|"profile_setup","warming_status": "completed"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -612,6 +613,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
+            source_capture_mode: ["affiliate", "leads", "both"],
             "account_status": ["active", "cooldown", "checkpoint"],"conversion_status": ["pending", "settled", "canceled"],"execution_mode": ["single", "seeding_2_accounts"],"social_platform": ["facebook", "instagram", "tiktok", "threads"],"source_type": ["group", "fanpage", "kol", "forum"],"task_status": ["pending_approval", "queued", "running", "completed", "failed", "rejected"],"warming_kind": ["lifestyle_post", "cross_warm", "profile_setup"],"warming_status": ["completed", "failed"]
           }
         }
