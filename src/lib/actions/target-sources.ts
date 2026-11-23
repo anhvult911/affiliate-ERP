@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
+import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   targetSourceIdSchema,
@@ -29,7 +30,9 @@ export async function createSource(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return fromZodError(parsed.error);
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("target_sources").insert(parsed.data);
+  const { error } = await supabase
+    .from("target_sources")
+    .insert({ ...parsed.data, user_id: LEAD_OWNER_ID });
 
   if (error) return databaseError(error);
 
@@ -48,7 +51,8 @@ export async function updateSource(id: string, input: unknown): Promise<ActionRe
   const { error } = await supabase
     .from("target_sources")
     .update(parsed.data)
-    .eq("id", parsedId.data);
+    .eq("id", parsedId.data)
+    .eq("user_id", LEAD_OWNER_ID);
 
   if (error) return databaseError(error);
 
@@ -69,6 +73,7 @@ export async function deleteSource(id: string): Promise<ActionResult> {
     .from("target_sources")
     .delete()
     .eq("id", parsedId.data)
+    .eq("user_id", LEAD_OWNER_ID)
     .select("id");
 
   if (error) return fail(error.message);
@@ -87,7 +92,8 @@ export async function toggleSourceActive(id: string, isActive: boolean): Promise
   const { error } = await supabase
     .from("target_sources")
     .update({ is_active: isActive })
-    .eq("id", parsedId.data);
+    .eq("id", parsedId.data)
+    .eq("user_id", LEAD_OWNER_ID);
 
   if (error) return fail(error.message);
 
@@ -107,7 +113,8 @@ export async function markSourceScanned(id: string): Promise<ActionResult> {
   const { error } = await supabase
     .from("target_sources")
     .update({ last_scanned_at: new Date().toISOString() })
-    .eq("id", parsedId.data);
+    .eq("id", parsedId.data)
+    .eq("user_id", LEAD_OWNER_ID);
 
   if (error) return fail(error.message);
 

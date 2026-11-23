@@ -10,6 +10,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 
+import { LEAD_OWNER_ID } from "../src/lib/leads/config";
 import { loadScriptEnv, LOCAL_ENV_FILES } from "./lib/env";
 
 function loadEnvironment(): void {
@@ -56,6 +57,7 @@ async function main(): Promise<number> {
     const { data: existing, error: findError } = await db
       .from("target_sources")
       .select("id")
+      .eq("user_id", LEAD_OWNER_ID)
       .eq("url", target.url)
       .maybeSingle();
 
@@ -66,6 +68,7 @@ async function main(): Promise<number> {
     }
 
     const values = {
+      user_id: LEAD_OWNER_ID,
       name: target.name,
       url: target.url,
       source_type: target.source_type,
@@ -77,7 +80,7 @@ async function main(): Promise<number> {
     };
 
     if (existing) {
-      const { error } = await db.from("target_sources").update(values).eq("id", existing.id);
+      const { error } = await db.from("target_sources").update(values).eq("user_id", LEAD_OWNER_ID).eq("id", existing.id);
       if (error) {
         console.log(`  failed line ${target.line}: ${error.message}`);
         failed += 1;

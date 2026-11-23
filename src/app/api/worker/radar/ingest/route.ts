@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { isGeminiConfigured, analyzePostForMatch, draftComment, embedText } from "@/lib/ai/gemini";
 import { readMatchThreshold } from "@/lib/ai/prompts";
+import { captureGroupLead } from "@/lib/leads/collector";
+import { LEAD_OWNER_ID } from "@/lib/leads/config";
+import type { SupabaseDb } from "@/lib/db";
+import type { Tables } from "@/lib/database.types";
 import { pickDefaultAccount } from "@/lib/queue/assignment";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyNewCapture } from "@/lib/telegram/notify";
@@ -17,6 +21,7 @@ const ingestSchema = z.object({
   postUrl: z.string().url("postUrl must be a URL."),
   postContent: z.string().max(20000).nullish(),
   postImages: z.array(z.string().url()).max(10).optional(),
+  authorName: z.string().trim().max(200).nullish(),
   /** Pin a product instead of letting Gemini choose (manual override). */
   productId: z.string().uuid().optional(),
   /** Generate the comment draft during ingest; otherwise the operator triggers it. */
@@ -24,6 +29,10 @@ const ingestSchema = z.object({
 });
 
 type Candidate = { id: string; name: string; niche: string | null; pros_cons_summary: string | null };
+
+type Source = Pick<Tables<"target_sources">,
+  "id" | "name" | "source_type" | "niche" | "tone_of_voice" | "group_rules" | "is_active" | "keywords_json"
+>;
 
 /**
  * POST /api/worker/radar/ingest
@@ -49,7 +58,8 @@ export async function POST(request: Request) {
 
   let sourceQuery = supabase
     .from("target_sources")
-    .select("id,name,source_type,niche,tone_of_voice,group_rules,is_active");
+    .select("id,name,source_type,niche,tone_of_voice,group_rules,is_active,keywords_json")
+    .eq("user_id", LEAD_OWNER_ID);
   sourceQuery = input.sourceId
     ? sourceQuery.eq("id", input.sourceId)
     : sourceQuery.eq("url", input.sourceUrl ?? "");
@@ -64,7 +74,31 @@ export async function POST(request: Request) {
   }
 
   const postUrl = normalizePostUrl(input.postUrl);
+  if (!source.is_active) return workerJson({ ok: true, created: false, paused: true });
 
+  const mode = source.source_type === "group" ? process.env.RADAR_GROUP_MODE?.trim() || "affiliate" : "affiliate";
+  if (mode === "affiliate") return ingestAffiliate(supabase, source, input, postUrl);
+  if (mode !== "leads" && mode !== "both") return workerJson({ ok: false, error: "Invalid RADAR_GROUP_MODE." }, 503);
+
+  const lead = captureGroupLead(supabase, source, postUrl, input.postContent ?? "", input.authorName ?? null);
+  if (mode === "leads") {
+    const result = await lead;
+    return result === "storage_error"
+      ? workerJson({ ok: false, error: "Could not persist lead.", lead: result }, 503)
+      : workerJson({ ok: true, created: false, duplicate: result === "duplicate", lead: result });
+  }
+  // Both consumers see every discovery, even if the other one already processed that URL.
+  const [leadResult, affiliate] = await Promise.all([lead, ingestAffiliate(supabase, source, input, postUrl)]);
+  const body = await affiliate.json();
+  if (leadResult === "storage_error" && affiliate.ok) {
+    return workerJson({ ...body, ok: false, error: "Could not persist lead.", lead: leadResult }, 503);
+  }
+  return workerJson({ ...body, lead: leadResult }, affiliate.status);
+}
+
+async function ingestAffiliate(
+  supabase: SupabaseDb, source: Source, input: z.infer<typeof ingestSchema>, postUrl: string
+) {
   const { data: existing } = await supabase
     .from("comment_tasks")
     .select("id")
@@ -209,6 +243,7 @@ export async function POST(request: Request) {
       supabase
         .from("target_sources")
         .update({ last_scanned_at: new Date().toISOString() })
+        .eq("user_id", LEAD_OWNER_ID)
         .eq("id", source.id),
       recordSeen(supabase, {
         postUrl,
@@ -306,6 +341,7 @@ export async function POST(request: Request) {
   await supabase
     .from("target_sources")
     .update({ last_scanned_at: new Date().toISOString() })
+    .eq("user_id", LEAD_OWNER_ID)
     .eq("id", source.id);
 
   // Push it to the phone: a capture is worthless if it waits for someone to open

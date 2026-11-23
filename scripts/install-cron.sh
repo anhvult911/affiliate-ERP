@@ -21,8 +21,8 @@ CALL="$APP_DIR/scripts/cron-call.sh"
 LOG=/var/log/affiliate-cron.log
 TARGET=/etc/cron.d/affiliate-erp
 
-if [ ! -x "$CALL" ]; then
-  echo "missing or not executable: $CALL" >&2
+if [ ! -r "$CALL" ]; then
+  echo "missing or unreadable: $CALL" >&2
   exit 1
 fi
 
@@ -37,20 +37,24 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 APP_DIR=$APP_DIR
 
 # Worker watchdog + queue hygiene.
-*/10 * * * * root APP_DIR=$APP_DIR $CALL health >> $LOG 2>&1
-*/30 * * * * root APP_DIR=$APP_DIR $CALL reconcile >> $LOG 2>&1
+*/10 * * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" health >> $LOG 2>&1
+*/30 * * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" reconcile >> $LOG 2>&1
 
 # Shopee sync (skips by itself while credentials are pending).
-0 */6 * * * root APP_DIR=$APP_DIR $CALL shopee-products >> $LOG 2>&1
-0 * * * * root APP_DIR=$APP_DIR $CALL shopee-conversions >> $LOG 2>&1
-0 18 * * * root APP_DIR=$APP_DIR $CALL shopee-validated >> $LOG 2>&1
+0 */6 * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" shopee-products >> $LOG 2>&1
+0 * * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" shopee-conversions >> $LOG 2>&1
+0 18 * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" shopee-validated >> $LOG 2>&1
 
 # Keyword product discovery: fills the pool with items the sourcing groups actually discuss.
 # Separate from the 6-hourly offer sync, which imports the default list with no niche.
-0 20 * * * root APP_DIR=$APP_DIR $CALL shopee-discover >> $LOG 2>&1
+0 20 * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" shopee-discover >> $LOG 2>&1
 
 # The deal channel: 04:30 and 13:30 UTC = 11:30 and 20:30 Vietnam.
-30 4,13 * * * root APP_DIR=$APP_DIR $CALL deal-poster >> $LOG 2>&1
+30 4,13 * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" deal-poster >> $LOG 2>&1
+
+# Lead follow-up digest: 02:00 UTC = 09:00 Vietnam. One digest of replied/freebie
+# leads that are due; the endpoint itself sends nothing when the list is empty.
+0 2 * * * root APP_DIR=$APP_DIR /bin/bash "$CALL" leads-followup >> $LOG 2>&1
 EOF
 
 chmod 644 "$TARGET"

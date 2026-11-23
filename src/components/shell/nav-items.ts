@@ -5,6 +5,7 @@ import {
   Package,
   Radar,
   Sparkles,
+  Target,
   Users,
   type LucideIcon
 } from "lucide-react";
@@ -47,6 +48,14 @@ export const NAV_ITEMS: NavItem[] = [
     module: "3",
     description: "Nhóm Facebook, Fanpage và KOL đang quét",
     icon: Radar,
+    mobilePrimary: false
+  },
+  {
+    href: "/leads",
+    label: "Lead Hunter",
+    module: "3",
+    description: "Chấm điểm bài viết, chăm sóc và chốt khách tiềm năng",
+    icon: Target,
     mobilePrimary: false
   },
   {

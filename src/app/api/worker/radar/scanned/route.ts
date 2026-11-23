@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyRadarBlind } from "@/lib/telegram/notify";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
@@ -36,12 +37,16 @@ export async function POST(request: Request) {
 
   const scannedAt = new Date().toISOString();
 
-  const { error } = await supabase
+  const { data: source, error } = await supabase
     .from("target_sources")
     .update({ last_scanned_at: scannedAt })
-    .eq("id", parsed.data.sourceId);
+    .eq("user_id", LEAD_OWNER_ID)
+    .eq("id", parsed.data.sourceId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return workerJson({ ok: false, error: error.message }, 500);
+  if (!source) return workerJson({ ok: false, error: "Unknown target source." }, 404);
 
   if (parsed.data.accountId) {
     const accountId = parsed.data.accountId;

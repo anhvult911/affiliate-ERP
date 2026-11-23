@@ -1,3 +1,4 @@
+import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from("target_sources")
     .select("id,name,url,source_type,niche,scan_interval_mins,last_scanned_at")
+    .eq("user_id", LEAD_OWNER_ID)
     .eq("is_active", true)
     .order("last_scanned_at", { ascending: true, nullsFirst: true })
     .limit(limit * 3)
