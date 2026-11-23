@@ -1,5 +1,6 @@
 import type { SourceType, TaskStatus } from "@/lib/constants";
 import type { Json, Tables } from "@/lib/database.types";
+import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { isSourceDue } from "@/components/radar/utils";
@@ -70,6 +71,7 @@ export async function listSources(filters: ListSourcesFilters = {}): Promise<Sou
   let query = supabase
     .from("target_sources")
     .select("*, comment_tasks(count)")
+    .eq("user_id", LEAD_OWNER_ID)
     .order("name", { ascending: true });
 
   if (filters.sourceType) query = query.eq("source_type", filters.sourceType);
@@ -101,6 +103,7 @@ export async function getSource(id: string): Promise<Tables<"target_sources"> | 
   const { data, error } = await supabase
     .from("target_sources")
     .select("*")
+    .eq("user_id", LEAD_OWNER_ID)
     .eq("id", id)
     .maybeSingle();
 
@@ -120,14 +123,17 @@ export async function getSourceStats(): Promise<SourceStats> {
     supabase
       .from("target_sources")
       .select("*", { count: "exact", head: true })
+      .eq("user_id", LEAD_OWNER_ID)
       .eq("is_active", true),
     supabase
       .from("target_sources")
       .select("*", { count: "exact", head: true })
+      .eq("user_id", LEAD_OWNER_ID)
       .eq("is_active", false),
     supabase
       .from("target_sources")
       .select("is_active, last_scanned_at, scan_interval_mins")
+      .eq("user_id", LEAD_OWNER_ID)
       .eq("is_active", true),
     supabase
       .from("comment_tasks")
@@ -155,6 +161,7 @@ export async function listSourceOptions(): Promise<SourceOption[]> {
   const { data, error } = await supabase
     .from("target_sources")
     .select("id, name, source_type")
+    .eq("user_id", LEAD_OWNER_ID)
     .order("name", { ascending: true });
 
   if (error) throw new Error(error.message);

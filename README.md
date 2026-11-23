@@ -22,10 +22,14 @@ Spec and product decisions: [`MASTER_PROMPT.md`](./MASTER_PROMPT.md).
 |---|---|---|---|
 | 1–2 | Accounts, personas, trust score, warming | `/accounts`, `/accounts/[id]` | `social_accounts` |
 | 3 | Radar watchlist | `/radar`, `/radar/[id]` | `target_sources` |
+| 3 | Lead Hunter & Mini CRM | `/leads` | `leads`, keyword settings on `target_sources` |
 | 4 | Affiliate hub & product pool | `/products`, `/products/[id]` | `products` |
 | 5 | AI contextual engine | `/ai` | `lib/ai/*`, `/api/ai/draft` |
 | 5–6 | Approval queue & execution | `/queue` | `comment_tasks` |
 | 7 | Analytics & ROI by Sub_ID | `/analytics` | `affiliate_conversions`, `v_task_roi`, `v_account_performance` |
+| — | Operations board | `/ops` | `ops_snapshot()` — one summary row per load; radar quality uses the latest 200 captures |
+
+Apply `20261121090000_ops_snapshot.sql` before deploying the `/ops` reader. The function uses the signed-in user's database permissions; it does not require a service-role key.
 
 ## Getting started
 
@@ -397,6 +401,16 @@ source whose scan yields nothing still advances `last_scanned_at`, otherwise it
 would hold the head of the due list forever. Before `GEMINI_API_KEY` exists, set
 `RADAR_PINNED_PRODUCT_ID` to attach every capture to one product (the ingest route
 answers 503 when neither a key nor a pinned product is available).
+
+### Lead Hunter & Mini CRM (Phase 1)
+
+1. Apply the pending Supabase migrations **before deploying the app**. Existing watchlist entries keep their IDs and get the Vietnamese keyword preset. All Phase 1 leads belong to the operator workspace `default_owner`; unauthenticated users have no access.
+2. In `/radar`, add or edit an active group and choose the terms to watch. On the **app server**, set `RADAR_GROUP_MODE=leads` for CRM only (no product or Gemini key needed), or `both` to also run affiliate matching. The default, `affiliate`, keeps existing behavior. The existing collector still needs `RADAR_ENABLED=true` to discover posts.
+3. Set `LLM_API_KEY`, `LLM_MODEL` and, for another OpenAI-compatible endpoint, `LLM_BASE_URL`. Use this only for groups whose posts you are allowed to process: keyword-matched text is sent to the configured model. Set `TELEGRAM_BOT_TOKEN` and the operator's private `TELEGRAM_CHAT_ID`; `MIN_INTENT_SCORE` defaults to `4`. Restart the app after changing server environment variables.
+4. Open `/leads` to filter leads, copy a draft, and record contact. Comments and DMs are **never sent to Facebook by the CRM**. A model failure leaves the original post in `pending_review`. Replied and sent-freebie statuses schedule a reminder 48 hours later; a purchase, upsell or ignore clears it. The daily 09:00 Vietnam-time digest lists due leads; use **one** scheduler (VPS or Vercel) for the deployment.
+   The cron target is `/api/cron/leads/followup` (`0 2 * * *` UTC), protected by the existing cron bearer token. No reminder is sent when nothing is due.
+
+**Try it offline:** `pnpm leads:dry-run` feeds three synthetic Vietnamese posts through the pipeline and prints alerts and persisted rows in a temporary in-memory Postgres database. It requires no `.env.local`, Facebook session, LLM key, Telegram bot or Docker. `pnpm verify:schema` checks the migration and CRM rules locally.
 
 ## Persona warming
 

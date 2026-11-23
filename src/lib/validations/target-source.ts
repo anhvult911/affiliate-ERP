@@ -35,6 +35,27 @@ const booleanField = z.preprocess((value) => {
   return value;
 }, z.boolean().default(true));
 
+/**
+ * Operator-entered keywords arrive as a textarea string (one per line or comma
+ * separated) from the Radar form, or as an array from programmatic callers.
+ * An absent value is left undefined so the DB default (the spec preset) applies
+ * on insert and an update does not wipe existing keywords.
+ */
+const keywordsField = z.preprocess((value) => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") {
+    return value
+      .split(/[\n,]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return value;
+}, z
+  .array(z.string().trim().min(1, "Từ khóa không được để trống.").max(80, "Mỗi từ khóa tối đa 80 ký tự."))
+  .max(60, "Tối đa 60 từ khóa.")
+  .transform((keywords) => [...new Set(keywords)])
+  .optional());
+
 export const targetSourceSchema = z.object({
   name: z
     .string()
@@ -50,6 +71,8 @@ export const targetSourceSchema = z.object({
   // Injected into the Gemini draft prompt so replies imitate the room.
   tone_of_voice: optionalText(500, "Tone of voice must be 500 characters or fewer."),
   group_rules: optionalText(2000, "Group rules must be 2,000 characters or fewer."),
+  // Intent keywords the lead pipeline matches against new posts.
+  keywords_json: keywordsField,
   scan_interval_mins: z.coerce
     .number()
     .int("Scan interval must be a whole number of minutes.")

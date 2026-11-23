@@ -12,6 +12,7 @@
     "test": "node --import tsx --test \"tests/*.test.ts\"",
     "verify:schema": "node supabase/ci/verify-schema.mjs",
     "shopee:probe": "tsx scripts/shopee-probe.ts",
+    "leads:dry-run": "node --import tsx scripts/leads-dry-run.mjs",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "hooks:install": "node scripts/install-hooks.mjs",
     "worker:dev": "pnpm --filter affiliate-worker dev",

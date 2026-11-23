@@ -51,6 +51,10 @@ APP_DIR=$APP_DIR
 
 # The deal channel: 04:30 and 13:30 UTC = 11:30 and 20:30 Vietnam.
 30 4,13 * * * root APP_DIR=$APP_DIR $CALL deal-poster >> $LOG 2>&1
+
+# Lead follow-up digest: 02:00 UTC = 09:00 Vietnam. One digest of replied/freebie
+# leads that are due; the endpoint itself sends nothing when the list is empty.
+0 2 * * * root APP_DIR=$APP_DIR $CALL leads-followup >> $LOG 2>&1
 EOF
 
 chmod 644 "$TARGET"

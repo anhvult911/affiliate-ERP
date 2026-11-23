@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PencilIcon, PlusIcon } from "lucide-react";
+import { ListChecksIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { SubmitButton } from "@/components/patterns/submit-button";
@@ -31,6 +31,8 @@ import { createSource, updateSource } from "@/lib/actions/target-sources";
 import { SOURCE_TYPE_LABEL, SOURCE_TYPES } from "@/lib/constants";
 import type { Tables } from "@/lib/database.types";
 import { useFormAction } from "@/lib/hooks/use-form-action";
+import { asStringArray } from "@/lib/json";
+import { DEFAULT_LEAD_KEYWORDS } from "@/lib/leads/config";
 
 /** Only the fields the form reads/writes — a full row (with captureCount) is accepted too. */
 export type SourceFormSource = Pick<
@@ -42,9 +44,18 @@ export type SourceFormSource = Pick<
   | "niche"
   | "tone_of_voice"
   | "group_rules"
+  | "keywords_json"
   | "scan_interval_mins"
   | "is_active"
 >;
+
+/** New groups start from the preset; existing groups show exactly what is stored. */
+function initialKeywords(source: SourceFormSource | undefined, mode: "create" | "edit") {
+  const stored = asStringArray(source?.keywords_json);
+  if (stored.length > 0) return stored.join("\n");
+  if (mode === "create") return DEFAULT_LEAD_KEYWORDS.join("\n");
+  return "";
+}
 
 export function SourceFormDialog({
   mode,
@@ -65,6 +76,7 @@ export function SourceFormDialog({
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [isActive, setIsActive] = useState(source?.is_active ?? true);
+  const [keywords, setKeywords] = useState(() => initialKeywords(source, mode));
   const { fieldErrors, error, pending, submit } = useFormAction(
     async (formData) => {
       const input = {
@@ -74,6 +86,7 @@ export function SourceFormDialog({
         niche: formData.get("niche"),
         tone_of_voice: formData.get("tone_of_voice"),
         group_rules: formData.get("group_rules"),
+        keywords_json: formData.get("keywords_json"),
         scan_interval_mins: formData.get("scan_interval_mins"),
         is_active: formData.get("is_active")
       };
@@ -98,7 +111,8 @@ export function SourceFormDialog({
   useEffect(() => {
     if (!open) return;
     setIsActive(source?.is_active ?? true);
-  }, [open, source?.is_active]);
+    setKeywords(initialKeywords(source, mode));
+  }, [open, source, mode]);
 
   const fieldError = (field: string) => fieldErrors?.[field]?.[0];
 
@@ -221,6 +235,56 @@ export function SourceFormDialog({
             </p>
             {fieldError("scan_interval_mins") ? (
               <p className="text-destructive text-xs">{fieldError("scan_interval_mins")}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <Label htmlFor="source-keywords">Từ khóa lọc nhu cầu</Label>
+                <p className="text-muted-foreground text-xs">
+                  Mỗi dòng một từ khóa. Pipeline Lead Hunter chỉ phân loại bài viết khớp danh sách
+                  này; để trống nghĩa là không lọc.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 shrink-0"
+                onClick={() => setKeywords(DEFAULT_LEAD_KEYWORDS.join("\n"))}
+              >
+                <ListChecksIcon />
+                Nạp bộ mặc định
+              </Button>
+            </div>
+            <Textarea
+              id="source-keywords"
+              name="keywords_json"
+              value={keywords}
+              onChange={(event) => setKeywords(event.target.value)}
+              placeholder={"file excel\ngoogle sheet\ntính lãi lỗ\ncần người code…"}
+              maxLength={4000}
+              rows={6}
+              aria-invalid={Boolean(fieldError("keywords_json"))}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-muted-foreground text-xs">
+                Nạp sẵn {DEFAULT_LEAD_KEYWORDS.length} từ khóa tiếng Việt cho Excel/Sheets và
+                automation.
+              </p>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {
+                  keywords
+                    .split(/[\n,]+/)
+                    .map((entry) => entry.trim())
+                    .filter(Boolean).length
+                }
+                /60
+              </span>
+            </div>
+            {fieldError("keywords_json") ? (
+              <p className="text-destructive text-xs">{fieldError("keywords_json")}</p>
             ) : null}
           </div>
 

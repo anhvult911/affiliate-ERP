@@ -9,16 +9,17 @@
 # Auth: CRON_SECRET from .env.production (the app also accepts WORKER_API_TOKEN as a fallback).
 # The secret is read on the box and never passed as an argument, so it stays out of `ps`.
 #
-# Usage: cron-call.sh <health|reconcile|deal-poster|shopee-products|shopee-conversions|shopee-validated>
+# Usage: cron-call.sh <health|reconcile|deal-poster|leads-followup|shopee-products|shopee-conversions|shopee-validated|shopee-discover>
 set -euo pipefail
 
-endpoint="${1:?usage: cron-call.sh <health|reconcile|deal-poster|shopee-products|shopee-conversions|shopee-validated>}"
+endpoint="${1:?usage: cron-call.sh <health|reconcile|deal-poster|leads-followup|shopee-products|shopee-conversions|shopee-validated|shopee-discover>}"
 APP_DIR="${APP_DIR:-/opt/affiliate-erp}"
 PORT="${APP_PORT:-3100}"
 ENV_FILE="$APP_DIR/.env.production"
 
 case "$endpoint" in
   health | reconcile | deal-poster) path="cron/$endpoint" ;;
+  leads-followup) path="cron/leads/followup" ;;
   shopee-products) path="cron/shopee/products" ;;
   shopee-conversions) path="cron/shopee/conversions" ;;
   shopee-validated) path="cron/shopee/validated" ;;

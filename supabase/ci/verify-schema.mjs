@@ -18,31 +18,14 @@
  * `npx supabase start` when Docker is available.
  *
  * LIMITATION, reported at the end of every run: PGlite bundles pg_trgm and
- * pgcrypto but not pgvector, so the `products.embedding` column, its HNSW index
- * and public.match_products() are filtered out. Verify those on a real
- * pgvector-enabled Postgres (any `pgvector/pgvector:pg16` container).
+ * pgcrypto but not pgvector. The harness uses real[] for embedding null checks;
+ * the vector index and public.match_products() need a pgvector-enabled Postgres.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { createFixtureDb } from "./fixture-db.mjs";
 
-import { PGlite } from "@electric-sql/pglite";
-import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(here, "..", "..");
-const migrationsDir = join(repoRoot, "supabase", "migrations");
-const seedFile = join(repoRoot, "supabase", "seed.sql");
-
-// Every migration, in filename order — exactly what `supabase db reset` runs.
-const migrationFiles = readdirSync(migrationsDir)
-  .filter((name) => name.endsWith(".sql"))
-  .sort()
-  .map((name) => join(migrationsDir, name));
-
+const seedFile = new URL("../seed.sql", import.meta.url);
 const results = [];
-const skipped = [];
 let failed = 0;
 
 function record(name, pass, detail = "") {
@@ -55,68 +38,38 @@ function eq(name, actual, expected) {
   record(name, same, same ? "" : `got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`);
 }
 
-const db = await PGlite.create({ extensions: { pg_trgm, pgcrypto } });
+const { db, skipped, rolesAvailable } = await createFixtureDb();
 const exec = (sql) => db.exec(sql);
 const rows = async (sql) => (await db.query(sql)).rows;
 const scalar = async (sql) => Object.values((await rows(sql))[0] ?? {})[0];
 
 /* ---------------------------------------------------------- Supabase surface */
-await exec(`create schema if not exists auth; create schema if not exists extensions;`);
+record("migration applies cleanly", true);
+
+// Isolate the board's empty state, row caps and rolling windows from the demo seed.
+await exec("begin");
+eq("empty ops board has zero counts and no recent activity", await rows(`
+  select recent_captures::int, best_recent_score, pending_approval::int, last_dealt_at from public.ops_snapshot()
+`), [{ recent_captures: 0, best_recent_score: null, pending_approval: 0, last_dealt_at: null }]);
 await exec(`
-  create table if not exists auth.users (
-    id uuid primary key default gen_random_uuid(),
-    email text
-  );
-  create or replace function auth.uid() returns uuid
-  language sql stable
-  as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  insert into public.products (name, affiliate_short_link, is_active, embedding, last_dealt_at)
+  select 'item ' || i, 'https://example.test/' || i, i <> 1,
+         case when i <> 1 then array[1.0]::real[] end,
+         case when i = 1 then now() - interval '168 hours' else now() - interval '169 hours' end
+  from generate_series(1, 1002) i;
+  insert into public.comment_tasks (post_url)
+  select 'https://example.test/task/' || i from generate_series(1, 501) i;
+  insert into public.radar_seen (post_url, score, seen_at)
+  select 'https://example.test/capture/' || i, case when i = 201 then 1 else 0.25 end,
+         now() - i * interval '1 minute' from generate_series(1, 201) i;
 `);
-
-let rolesAvailable = true;
-try {
-  await exec(
-    `create role anon noinherit;
-     create role authenticated noinherit;
-     create role service_role noinherit bypassrls;`
-  );
-} catch {
-  rolesAvailable = false;
-}
-
-for (const [label, ext] of [
-  ["pg_trgm", "pg_trgm"],
-  ["pgcrypto", "pgcrypto"]
-]) {
-  try {
-    await exec(`create extension if not exists "${ext}" with schema extensions`);
-  } catch {
-    skipped.push(`${label} could not be relocated into the extensions schema`);
-  }
-}
-
-/* --------------------------------------------------------- migration + seed */
-let migration = migrationFiles.map((file) => readFileSync(file, "utf8")).join("\n");
-
-// pgvector is not bundled here; drop exactly what needs it and report it.
-migration = migration
-  .replace(/create extension if not exists "vector"[^\n]*\r?\n/, "")
-  .replace(/\r?\n\s*embedding extensions\.vector\(768\),/, "\n")
-  .replace(/create index products_embedding_hnsw_idx[\s\S]*?;\r?\n/, "")
-  .replace(/create or replace function public\.match_products\([\s\S]*?\r?\n\$\$;\r?\n/, "")
-  .replace(/revoke all on function public\.match_products[^\n]*\r?\n/, "")
-  .replace(/grant execute on function public\.match_products[^\n]*\r?\n/, "");
-skipped.push(
-  "pgvector statements (create extension vector, products.embedding, products_embedding_hnsw_idx, match_products) — verify on a pgvector/pgvector:pg16 container"
-);
-
-try {
-  await exec(migration);
-  record("migration applies cleanly", true);
-} catch (error) {
-  record("migration applies cleanly", false, String(error.message).split("\n")[0]);
-  report();
-  process.exit(1);
-}
+eq("ops counts all products and tasks but scores only the latest 200 captures", await rows(`
+  select products_active::int, products_missing_embedding::int, pending_approval::int, dealt_count_7d::int,
+         last_dealt_at = now() - interval '168 hours' as includes_boundary, recent_captures::int,
+         best_recent_score::float from public.ops_snapshot()
+`), [{ products_active: 1001, products_missing_embedding: 1, pending_approval: 501, dealt_count_7d: 1,
+        includes_boundary: true, recent_captures: 200, best_recent_score: 0.25 }]);
+await exec("rollback");
 
 await exec(readFileSync(seedFile, "utf8"));
 record("seed applies cleanly", true);
@@ -905,6 +858,341 @@ try {
   badPortRejected = /social_accounts_proxy_port_check/.test(String(error.message));
 }
 record("proxy_port outside 1..65535 is rejected", badPortRejected);
+
+/* ============================ Phase 1 lead hunter / mini CRM =================
+   Contract: target_sources gains (user_id, keywords_json); leads is the CRM
+   table. Dedupe is (user_id, post_id); a lead may outlive its watchlist group;
+   contact statuses set +48h, terminal statuses clear it, overrides win. */
+eq(
+  "every seeded source is owned by default_owner with the keyword preset",
+  await rows(`select count(*)::int as n,
+                     count(*) filter (where user_id = 'default_owner')::int as owned,
+                     count(*) filter (where keywords_json = public.default_lead_keywords())::int as keyworded
+                from public.target_sources
+               where id in ('aaaa1111-1111-4111-8111-111111111111',
+                            'aaaa2222-2222-4222-8222-222222222222',
+                            'aaaa3333-3333-4333-8333-333333333333',
+                            'aaaa4444-4444-4444-8444-444444444444')`),
+  [{ n: 4, owned: 4, keyworded: 4 }]
+);
+eq(
+  "the preset is the 21-keyword flat array from the spec",
+  await rows(`select jsonb_typeof(public.default_lead_keywords()) as kind,
+                     jsonb_array_length(public.default_lead_keywords())::int as n,
+                     public.default_lead_keywords() @> '["tính lãi lỗ"]'::jsonb as has_finance,
+                     public.default_lead_keywords() @> '["thuê làm tool"]'::jsonb as has_automation`),
+  [{ kind: "array", n: 21, has_finance: true, has_automation: true }]
+);
+
+await exec(`insert into public.target_sources (id, name, url, source_type)
+            values ('eeee1111-1111-4111-8111-111111111111', 'Shop chủ shop',
+                    'https://www.facebook.com/groups/chu-shop', 'group')`);
+eq(
+  "a new group inherits owner + keywords without supplying them",
+  await rows(`select user_id, keywords_json = public.default_lead_keywords() as preset,
+                     jsonb_array_length(keywords_json)::int as n
+                from public.target_sources where id = 'eeee1111-1111-4111-8111-111111111111'`),
+  [{ user_id: "default_owner", preset: true, n: 21 }]
+);
+
+let keywordsShapeRejected = false;
+try {
+  await exec(`insert into public.target_sources (name, url, source_type, keywords_json)
+              values ('Bad keywords', 'https://www.facebook.com/groups/bad-keywords', 'group', '{"a":1}')`);
+} catch (error) {
+  keywordsShapeRejected = /target_sources_keywords_array_check/.test(String(error.message));
+}
+record("keywords_json must be a JSON array", keywordsShapeRejected);
+
+let keywordElementRejected = false;
+try {
+  await exec(`insert into public.target_sources (name, url, source_type, keywords_json)
+              values ('Bad keyword element', 'https://www.facebook.com/groups/bad-keyword-element',
+                      'group', '["file excel", 7]')`);
+} catch (error) {
+  keywordElementRejected = /target_sources_keywords_array_check/.test(String(error.message));
+}
+record("keywords_json rejects non-string elements", keywordElementRejected);
+
+// URL uniqueness is keyed by owner: the Phase 1 operator cannot watch the same
+// group twice, while a second owner may track the very same group in Phase 2.
+let ownerUrlRejected = false;
+try {
+  await exec(`insert into public.target_sources (name, url, source_type)
+              values ('Duplicate owner url', 'https://www.facebook.com/groups/me-bim-san-deal', 'group')`);
+} catch (error) {
+  ownerUrlRejected = /target_sources_user_url_key/.test(String(error.message));
+}
+record("one owner cannot watch the same group URL twice", ownerUrlRejected);
+
+await exec(`insert into public.target_sources (user_id, name, url, source_type)
+            values ('tenant_b', 'Same group, another owner',
+                    'https://www.facebook.com/groups/me-bim-san-deal', 'group')`);
+eq(
+  "another owner can watch the same group URL",
+  await rows(`select count(*)::int as n from public.target_sources
+               where url = 'https://www.facebook.com/groups/me-bim-san-deal'`),
+  [{ n: 2 }]
+);
+
+/* -------------------------------------------------- raw save + dedupe claim */
+await exec(`insert into public.leads
+  (post_id, group_id, group_name, post_url, author_name, post_content, status)
+  values ('lead-raw-1', 'eeee1111-1111-4111-8111-111111111111', 'Shop chủ shop',
+          'https://www.facebook.com/groups/chu-shop/posts/1', 'Chị Hoa',
+          'Có ai làm file excel tính lãi lỗ cho shop không ạ, mình trả phí.', 'pending_review')`);
+eq(
+  "a raw lead is saved as pending_review with no classification",
+  await rows(`select status::text, intent_type, score, matched_category,
+                     group_id is not null as grouped
+                from public.leads where post_id = 'lead-raw-1'`),
+  [{ status: "pending_review", intent_type: null, score: null, matched_category: null, grouped: true }]
+);
+
+await exec(`update public.leads
+               set intent_type = 'help_needed', score = 4, matched_category = 'sheets_excel',
+                   summary = 'Cần file Excel tính lãi lỗ cho shop',
+                   suggested_comment = 'Mình có mẫu file này, để mình gửi bạn nhé.',
+                   suggested_dm = 'Bạn cho mình hỏi shop bán online hay offline ạ?',
+                   status = 'new'
+             where post_id = 'lead-raw-1'`);
+eq(
+  "classification writes the typed fields and flips the lead to new",
+  await rows(`select status::text, intent_type::text, score, matched_category::text
+                from public.leads where post_id = 'lead-raw-1'`),
+  [{ status: "new", intent_type: "help_needed", score: 4, matched_category: "sheets_excel" }]
+);
+
+const firstClaim = await rows(`insert into public.leads
+  (post_id, group_name, post_url, post_content, status)
+  values ('lead-claim', 'Group A', 'https://www.facebook.com/groups/claim/posts/1',
+          'Cần người làm tool đồng bộ đơn hàng, mình trả phí.', 'pending_review')
+  on conflict (user_id, post_id) do nothing
+  returning id`);
+eq("the first claim of a post wins", firstClaim.length, 1);
+const secondClaim = await rows(`insert into public.leads
+  (post_id, group_name, post_url, post_content, status)
+  values ('lead-claim', 'Group A', 'https://www.facebook.com/groups/claim/posts/1',
+          'Cần người làm tool đồng bộ đơn hàng, mình trả phí.', 'pending_review')
+  on conflict (user_id, post_id) do nothing
+  returning id`);
+eq("a rescan of the same post claims nothing", secondClaim.length, 0);
+
+let duplicateLeadRejected = false;
+try {
+  await exec(`insert into public.leads (post_id, group_name, post_url, post_content)
+              values ('lead-raw-1', 'Shop chủ shop', 'https://www.facebook.com/groups/chu-shop/posts/1',
+                      'Trùng bài viết nhưng khác lần quét.')`);
+} catch (error) {
+  duplicateLeadRejected = /leads_user_post_key/.test(String(error.message));
+}
+record("the same (owner, post_id) cannot be stored twice", duplicateLeadRejected);
+
+await exec(`insert into public.leads (user_id, post_id, group_name, post_url, post_content)
+            values ('tenant_b', 'lead-raw-1', 'Shop chủ shop',
+                    'https://www.facebook.com/groups/chu-shop/posts/1',
+                    'Cùng bài viết, chủ sở hữu khác ở Phase 2.')`);
+record("another owner may hold the same post_id", true);
+
+let badLeadScoreRejected = false;
+try {
+  await exec(`insert into public.leads (post_id, group_name, post_url, post_content, intent_type, score)
+              values ('lead-bad-score', 'G', 'https://www.facebook.com/groups/x/posts/1',
+                      'Nội dung đủ dài cho kiểm tra score.', 'help_needed', 6)`);
+} catch (error) {
+  badLeadScoreRejected = /leads_score_check/.test(String(error.message));
+}
+record("score outside 1..5 is rejected", badLeadScoreRejected);
+
+let intentWithoutScoreRejected = false;
+try {
+  await exec(`insert into public.leads (post_id, group_name, post_url, post_content, intent_type)
+              values ('lead-bad-pair', 'G', 'https://www.facebook.com/groups/x/posts/2',
+                      'Nội dung đủ dài cho kiểm tra cặp intent/score.', 'help_needed')`);
+} catch (error) {
+  intentWithoutScoreRejected = /leads_intent_score_pair_check/.test(String(error.message));
+}
+record("intent without a score is rejected", intentWithoutScoreRejected);
+
+let crossOwnerGroupRejected = false;
+try {
+  await exec(`insert into public.leads (user_id, post_id, group_id, group_name, post_url, post_content)
+              values ('tenant_b', 'lead-cross-group', 'eeee1111-1111-4111-8111-111111111111',
+                      'Shop chủ shop', 'https://www.facebook.com/groups/chu-shop/posts/2',
+                      'Nhóm của chủ khác không được gán.')`);
+} catch (error) {
+  crossOwnerGroupRejected = /leads_group_owner_fkey/.test(String(error.message));
+}
+record("a lead cannot point at another owner's group", crossOwnerGroupRejected);
+
+/* ------------------------------------------- group deletion keeps the lead */
+await exec(`delete from public.target_sources where id = 'eeee1111-1111-4111-8111-111111111111'`);
+eq(
+  "deleting a watched group keeps its leads and nulls only group_id",
+  await rows(`select group_id, group_name, user_id, length(post_content) > 0 as has_content
+                from public.leads where post_id = 'lead-raw-1' and user_id = 'default_owner'`),
+  [{ group_id: null, group_name: "Shop chủ shop", user_id: "default_owner", has_content: true }]
+);
+
+/* ------------------------------------------------- 48h follow-up transitions */
+await exec(`insert into public.leads
+  (post_id, group_name, post_url, post_content, intent_type, score, matched_category, status)
+  values ('lead-follow', 'Group Follow', 'https://www.facebook.com/groups/follow/posts/1',
+          'Cần báo cáo doanh thu tự động mỗi ngày cho shop.', 'help_needed', 4, 'automation', 'new')`);
+eq(
+  "a classified insert starts at new with no follow-up clock",
+  await rows(`select status::text, next_followup_at, last_contacted_at
+                from public.leads where post_id = 'lead-follow'`),
+  [{ status: "new", next_followup_at: null, last_contacted_at: null }]
+);
+
+await exec(`update public.leads set status = 'replied' where post_id = 'lead-follow'`);
+eq(
+  "moving to replied stamps contact and +48h",
+  await rows(`select last_contacted_at is not null as contacted,
+                     next_followup_at - last_contacted_at = interval '48 hours' as exactly_48h
+                from public.leads where post_id = 'lead-follow'`),
+  [{ contacted: true, exactly_48h: true }]
+);
+
+const followClock = await scalar(`select extract(epoch from next_followup_at)::float8
+                                     from public.leads where post_id = 'lead-follow'`);
+await exec(`update public.leads set notes = 'Đã inbox, chờ trả lời.' where post_id = 'lead-follow'`);
+eq(
+  "editing notes does not restart the follow-up clock",
+  await scalar(`select extract(epoch from next_followup_at)::float8 from public.leads where post_id = 'lead-follow'`),
+  followClock
+);
+
+await exec(`update public.leads set status = 'new' where post_id = 'lead-follow'`);
+await exec(`update public.leads set status = 'sent_freebie', next_followup_at = now() + interval '6 hours'
+             where post_id = 'lead-follow'`);
+eq(
+  "an explicit next_followup_at override survives the contact transition",
+  await rows(`select last_contacted_at is not null as contacted,
+                     round(extract(epoch from (next_followup_at - now())) / 3600)::int as hours
+                from public.leads where post_id = 'lead-follow'`),
+  [{ contacted: true, hours: 6 }]
+);
+
+await exec(`update public.leads set status = 'bought_template' where post_id = 'lead-follow'`);
+eq(
+  "bought_template is terminal and clears the follow-up clock",
+  await rows(`select status::text, next_followup_at from public.leads where post_id = 'lead-follow'`),
+  [{ status: "bought_template", next_followup_at: null }]
+);
+
+await exec(`insert into public.leads
+  (post_id, group_name, post_url, post_content, intent_type, score, matched_category, status)
+  values ('lead-replied-insert', 'Group Insert', 'https://www.facebook.com/groups/insert/posts/1',
+          'Cần đồng bộ đơn từ Shopee về Google Sheet.', 'help_needed', 5, 'automation', 'replied')`);
+eq(
+  "a lead inserted as replied gets the same 48h clock",
+  await rows(`select last_contacted_at is not null as contacted,
+                     next_followup_at - last_contacted_at = interval '48 hours' as exactly_48h
+                from public.leads where post_id = 'lead-replied-insert'`),
+  [{ contacted: true, exactly_48h: true }]
+);
+
+await exec(`update public.leads set status = 'upsold_automation' where post_id = 'lead-replied-insert'`);
+eq("upsold_automation clears the follow-up clock",
+  await scalar(`select next_followup_at from public.leads where post_id = 'lead-replied-insert'`), null);
+
+await exec(`update public.leads set status = 'replied' where post_id = 'lead-replied-insert'`);
+await exec(`update public.leads set status = 'ignored' where post_id = 'lead-replied-insert'`);
+eq("ignored clears the follow-up clock",
+  await scalar(`select next_followup_at from public.leads where post_id = 'lead-replied-insert'`), null);
+
+/* ------------------------------------------------------ due reminder query */
+await exec(`insert into public.leads
+  (user_id, post_id, group_name, post_url, post_content, intent_type, score, matched_category,
+   status, next_followup_at)
+  values
+    ('due_owner','due-replied','Group Due', 'https://www.facebook.com/groups/due/posts/1',
+     'Nội dung đủ dài cho lead due 1.', 'help_needed', 4, 'sheets_excel', 'replied', now() - interval '2 hours'),
+    ('due_owner','due-freebie','Group Due', 'https://www.facebook.com/groups/due/posts/2',
+     'Nội dung đủ dài cho lead due 2.', 'help_needed', 5, 'automation', 'sent_freebie', now() - interval '1 day'),
+    ('due_owner','due-future','Group Due', 'https://www.facebook.com/groups/due/posts/3',
+     'Nội dung đủ dài cho lead due 3.', 'buyer_inquiry', 4, 'other', 'replied', now() + interval '10 hours'),
+    ('due_owner','due-bought','Group Due', 'https://www.facebook.com/groups/due/posts/4',
+     'Nội dung đủ dài cho lead due 4.', 'buyer_inquiry', 5, 'sheets_excel', 'bought_template', now() - interval '1 day'),
+    ('due_owner','due-ignored','Group Due', 'https://www.facebook.com/groups/due/posts/5',
+     'Nội dung đủ dài cho lead due 5.', 'irrelevant', 1, 'other', 'ignored', now() - interval '1 day'),
+    ('due_owner','due-new','Group Due', 'https://www.facebook.com/groups/due/posts/6',
+     'Nội dung đủ dài cho lead due 6.', 'help_needed', 3, 'automation', 'new', now() - interval '1 day')`);
+
+const reminderQuery = `select post_id from public.leads
+                        where user_id = 'due_owner'
+                          and status in ('replied', 'sent_freebie')
+                          and next_followup_at <= now()
+                        order by next_followup_at, post_id`;
+eq(
+  "the 09:00 reminder picks only due replied/sent_freebie leads",
+  await rows(reminderQuery),
+  [{ post_id: "due-freebie" }, { post_id: "due-replied" }]
+);
+eq(
+  "terminal rows never keep a follow-up timestamp (even if supplied on insert)",
+  await scalar(`select count(*)::int from public.leads
+                 where user_id = 'due_owner'
+                   and status in ('bought_template','upsold_automation','ignored')
+                   and next_followup_at is not null`),
+  0
+);
+
+/* ------------------------------------- owner scope on top of operator RLS */
+if (rolesAvailable) {
+  await exec(`insert into public.target_sources (user_id, name, url, source_type)
+              values ('tenant_b', 'Tenant B group', 'https://www.facebook.com/groups/tenant-b', 'group')`);
+  await exec(`insert into public.leads (user_id, post_id, group_name, post_url, post_content)
+              values ('default_owner','rls-mine','My group',
+                      'https://www.facebook.com/groups/rls/posts/1','Bài viết của chủ sở hữu hiện tại.'),
+                     ('tenant_b','rls-theirs','Their group',
+                      'https://www.facebook.com/groups/rls/posts/2','Bài viết của chủ sở hữu khác.')`);
+
+  const ownLeadCount = await scalar(`select count(*)::int from public.leads where user_id = 'default_owner'`);
+  const ownSourceCount = await scalar(`select count(*)::int from public.target_sources where user_id = 'default_owner'`);
+
+  await exec(`
+    set role authenticated;
+    select set_config('request.jwt.claim.sub', '99999999-9999-4999-8999-999999999991', false);
+  `);
+
+  eq("the operator reads only their own leads", await scalar(`select count(*)::int from public.leads`), ownLeadCount);
+  eq("the operator reads only their own watchlist", await scalar(`select count(*)::int from public.target_sources`), ownSourceCount);
+  eq("another tenant's lead is invisible", await scalar(`select count(*)::int from public.leads where user_id = 'tenant_b'`), 0);
+
+  let tenantLeadWriteRejected = false;
+  try {
+    await exec(`insert into public.leads (user_id, post_id, group_name, post_url, post_content)
+                values ('tenant_b','rls-forbidden','Bad group',
+                        'https://www.facebook.com/groups/rls/posts/3','Không được ghi vào chủ khác.')`);
+  } catch (error) {
+    tenantLeadWriteRejected = /row-level security|violates row-level/i.test(String(error.message));
+  }
+  record("the operator cannot insert a lead for another tenant", tenantLeadWriteRejected);
+
+  let tenantSourceWriteRejected = false;
+  try {
+    await exec(`insert into public.target_sources (user_id, name, url, source_type)
+                values ('tenant_b', 'Bad tenant source', 'https://www.facebook.com/groups/bad-tenant', 'group')`);
+  } catch (error) {
+    tenantSourceWriteRejected = /row-level security|violates row-level/i.test(String(error.message));
+  }
+  record("the operator cannot insert a watchlist row for another tenant", tenantSourceWriteRejected);
+
+  await exec(`reset role`);
+  await exec(`select set_config('request.jwt.claim.sub', '', false)`);
+}
+
+// Restore the fixture to its seeded shape so later harness sections (e.g. the
+// end-to-end dry run) start from the documented 4 watched sources / no leads.
+await exec(`
+  delete from public.leads
+   where post_id like 'lead-%' or post_id like 'due-%' or post_id like 'rls-%';
+  delete from public.target_sources
+   where user_id <> 'default_owner' or url like '%/tenant-b';
+`);
 
 report();
 
