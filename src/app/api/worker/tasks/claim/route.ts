@@ -7,6 +7,7 @@ import { isShopeeConfigured, readShopeeConfig } from "@/lib/shopee/config";
 import { generateShortLink, originUrlFor, preferShortLink } from "@/lib/shopee/short-link";
 import { authorizeWorker, workerJson } from "@/lib/worker/auth";
 import { asStringArray } from "@/lib/json";
+import { affiliateDraftOnly } from "@/lib/queue/publication";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return workerJson({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid body." }, 400);
   }
+  if (affiliateDraftOnly()) return workerJson({ ok: true, tasks: [], mode: "draft_only" });
 
   const supabase = createSupabaseAdminClient();
 

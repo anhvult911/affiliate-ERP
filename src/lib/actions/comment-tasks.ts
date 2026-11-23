@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { WORKER_LEASE_MINUTES } from "@/lib/constants";
 import { resolveDb, type SupabaseDb } from "@/lib/db";
 import { pickDefaultAccount } from "@/lib/queue/assignment";
+import { affiliateDraftOnly } from "@/lib/queue/publication";
 import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -46,6 +47,7 @@ export async function approveTask(
 ): Promise<ActionResult<{ subIdCode: string }>> {
   const parsed = approveTaskSchema.safeParse(input);
   if (!parsed.success) return fromZodError(parsed.error);
+  if (affiliateDraftOnly()) return fail("Affiliate đang ở chế độ chỉ soạn nháp. Bạn có thể lưu và sao chép bản nháp, nhưng không thể xếp lịch đăng.");
 
   const { taskId, accountId, secondaryAccountId, executionMode, draft, selectedReviewImage } =
     parsed.data;

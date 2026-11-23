@@ -410,6 +410,8 @@ answers 503 when neither a key nor a pinned product is available).
 4. Open `/leads` to filter leads, copy a draft, and record contact. Comments and DMs are **never sent to Facebook by the CRM**. A model failure leaves the original post in `pending_review`. Replied and sent-freebie statuses schedule a reminder 48 hours later; a purchase, upsell or ignore clears it. The daily 09:00 Vietnam-time digest lists due leads; use **one** scheduler (VPS or Vercel) for the deployment.
    The cron target is `/api/cron/leads/followup` (`0 2 * * *` UTC), protected by the existing cron bearer token. No reminder is sent when nothing is due.
 
+For Facebook affiliate drafts without automatic posting, set `AFFILIATE_COMMENT_MODE=draft_only` on the app server and restart it. This blocks queue approval (including Telegram) and dispatch to all workers; it does not cancel tasks already in flight. Stop posting workers before switching. Keep `RADAR_GROUP_MODE=both`, worker `RADAR_ENABLED=true` and `WARMING_ENABLED=false` to collect leads and prepare affiliate drafts without persona posts. Review drafts in `/queue`.
+
 **Try it offline:** `pnpm leads:dry-run` feeds three synthetic Vietnamese posts through the pipeline and prints alerts and persisted rows in a temporary in-memory Postgres database. It requires no `.env.local`, Facebook session, LLM key, Telegram bot or Docker. `pnpm verify:schema` checks the migration and CRM rules locally.
 
 ## Persona warming
