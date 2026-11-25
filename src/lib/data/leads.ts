@@ -1,4 +1,5 @@
 import type { Tables } from "@/lib/database.types";
+import type { Views } from "@/lib/db-types";
 import { LEAD_OWNER_ID } from "@/lib/leads/config";
 import type { LeadCategory, LeadStatus } from "@/lib/leads/status";
 import { LEADS_PAGE_SIZE } from "@/lib/leads/url";
@@ -10,6 +11,18 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * owner, so the same code keeps working when Phase 2 adds real tenants.
  */
 export type Lead = Tables<"leads">;
+export type LeadMilestone = Tables<"lead_milestones">;
+export type LeadReceipt = Tables<"lead_receipts">;
+export type LeadRecurringTerm = Tables<"lead_recurring_terms">;
+
+/** A page of leads plus the explicit sales facts attached to those leads. */
+export type LeadWithSales = Lead & {
+  milestones: LeadMilestone[];
+  receipts: LeadReceipt[];
+  recurringTerm: LeadRecurringTerm | null;
+};
+
+export type LeadGroupFunnelRow = Views<"v_lead_group_funnel_14d">;
 
 export type LeadListFilters = {
   status?: LeadStatus | null;
@@ -21,7 +34,7 @@ export type LeadListFilters = {
 };
 
 export type LeadListResult = {
-  rows: Lead[];
+  rows: LeadWithSales[];
   total: number;
   page: number;
   pageCount: number;
@@ -78,11 +91,92 @@ export async function listLeads(filters: LeadListFilters = {}): Promise<LeadList
   if (error) throw new Error(error.message);
 
   const total = count ?? 0;
+  const rows = (data ?? []) as Lead[];
+  const enriched = await attachSalesFacts(rows);
+
   return {
-    rows: (data ?? []) as Lead[],
+    rows: enriched,
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / pageSize)),
     pageSize
   };
+}
+
+/**
+ * Three bounded, owner-scoped queries for the current page instead of an N+1
+ * lookup per card. Rows are grouped in memory; a lead with no milestone/receipt
+ * stays explicitly empty (missing, not inferred).
+ */
+async function attachSalesFacts(leads: Lead[]): Promise<LeadWithSales[]> {
+  if (leads.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const ids = leads.map((lead) => lead.id);
+
+  const [milestones, receipts, terms] = await Promise.all([
+    supabase
+      .from("lead_milestones")
+      .select("*")
+      .in("lead_id", ids)
+      .eq("user_id", LEAD_OWNER_ID)
+      .order("occurred_at", { ascending: true }),
+    supabase
+      .from("lead_receipts")
+      .select("*")
+      .in("lead_id", ids)
+      .eq("user_id", LEAD_OWNER_ID)
+      .order("paid_at", { ascending: false }),
+    supabase
+      .from("lead_recurring_terms")
+      .select("*")
+      .in("lead_id", ids)
+      .eq("user_id", LEAD_OWNER_ID)
+      .is("ended_on", null)
+  ]);
+
+  if (milestones.error) throw new Error(milestones.error.message);
+  if (receipts.error) throw new Error(receipts.error.message);
+  if (terms.error) throw new Error(terms.error.message);
+
+  const byLead = new Map<string, LeadWithSales>(
+    leads.map(
+      (lead) =>
+        [lead.id, { ...lead, milestones: [], receipts: [], recurringTerm: null }] as const
+    )
+  );
+
+  for (const milestone of (milestones.data ?? []) as LeadMilestone[]) {
+    byLead.get(milestone.lead_id)?.milestones.push(milestone);
+  }
+  for (const receipt of (receipts.data ?? []) as LeadReceipt[]) {
+    byLead.get(receipt.lead_id)?.receipts.push(receipt);
+  }
+  for (const term of (terms.data ?? []) as LeadRecurringTerm[]) {
+    const lead = byLead.get(term.lead_id);
+    if (lead) lead.recurringTerm = term;
+  }
+
+  return leads.map(
+    (lead) =>
+      byLead.get(lead.id) ?? { ...lead, milestones: [], receipts: [], recurringTerm: null }
+  );
+}
+
+/**
+ * Per-group 14-day funnel. All aggregation happens in the view so the report
+ * cannot accidentally double-count a lead across a page boundary or a repeat
+ * receipt. RLS keeps the result owner-scoped even if the view is queried alone.
+ */
+export async function listLeadGroupFunnel(): Promise<LeadGroupFunnelRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("v_lead_group_funnel_14d")
+    .select("*")
+    .order("cash_total_vnd", { ascending: false })
+    .order("qualified_leads", { ascending: false })
+    .order("group_name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as LeadGroupFunnelRow[];
 }

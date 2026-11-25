@@ -18,6 +18,8 @@ import {
   listQueueSourceOptions,
   listQueueTasks
 } from "@/lib/data/comment-tasks";
+import { getShopeeSyncStatus } from "@/lib/data/shopee";
+import { affiliateDraftOnly } from "@/lib/queue/publication";
 import { parseQueueLimit } from "@/lib/queue/url";
 
 export const metadata: Metadata = { title: "Hàng đợi duyệt bài" };
@@ -48,14 +50,15 @@ export default async function QueuePage({
   const sourceId = params.source && UUID_PATTERN.test(params.source) ? params.source : null;
   const requestedTaskId = params.task && UUID_PATTERN.test(params.task) ? params.task : null;
 
-  const [tasks, counts, sources, accounts, loadedTask] = await Promise.all([
+  const [tasks, counts, sources, accounts, loadedTask, shopeeSync] = await Promise.all([
     listQueueTasks({ status, sourceId, limit }),
     getQueueCounts(),
     listQueueSourceOptions(),
     listAssignableAccounts(),
     // Independent of the list: the task id comes from the URL, so waiting for the
     // other four before starting this one only added a round trip.
-    requestedTaskId ? getQueueTask(requestedTaskId) : Promise.resolve(null)
+    requestedTaskId ? getQueueTask(requestedTaskId) : Promise.resolve(null),
+    getShopeeSyncStatus()
   ]);
   // The detail pane must belong to the tab that is open, otherwise the pane and
   // the list disagree (and on mobile the list is hidden entirely).
@@ -67,12 +70,17 @@ export default async function QueuePage({
   const conversions = selected
     ? await getTaskConversions({ taskId: selected.id, subIdCode: selected.sub_id_code })
     : [];
+  const draftOnly = affiliateDraftOnly();
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Hàng đợi duyệt"
-        description="Các bài viết được radar phát hiện vượt ngưỡng liên quan. Kiểm tra bản nháp AI và bấm duyệt để worker tự động đi bình luận."
+        description={
+          draftOnly
+            ? "Chế độ chỉ soạn nháp: kiểm tra/sửa bản nháp AI, sao chép link tracking và đăng thủ công. Hệ thống không tự đăng."
+            : "Các bài viết được radar phát hiện vượt ngưỡng liên quan. Kiểm tra bản nháp AI và bấm duyệt để worker tự động đi bình luận."
+        }
         actions={<RealtimeBadge />}
       />
 
@@ -80,7 +88,16 @@ export default async function QueuePage({
         <StatCard label="Chờ duyệt" value={counts.pending_approval} tone="warning" icon={ClockIcon} />
         <StatCard label="Đã xếp hàng" value={counts.queued} tone="info" icon={InboxIcon} />
         <StatCard label="Đang chạy" value={counts.running} tone="info" icon={LoaderIcon} />
-        <StatCard label="Hoàn thành" value={counts.completed} tone="success" icon={CheckCheckIcon} />
+        {draftOnly ? (
+          <StatCard
+            label="Đã đăng thủ công"
+            value={counts.manually_published}
+            tone="success"
+            icon={CheckCheckIcon}
+          />
+        ) : (
+          <StatCard label="Hoàn thành" value={counts.completed} tone="success" icon={CheckCheckIcon} />
+        )}
       </div>
 
       <QueueFilters
@@ -104,6 +121,7 @@ export default async function QueuePage({
               sourceId={sourceId}
               limit={limit}
               selectedId={selected?.id ?? null}
+              draftOnly={draftOnly}
             />
         </div>
 
@@ -113,6 +131,8 @@ export default async function QueuePage({
               task={selected}
               accounts={accounts}
               conversions={conversions}
+              shopeeSync={shopeeSync}
+              draftOnly={draftOnly}
               status={status}
               sourceId={sourceId}
               limit={limit}

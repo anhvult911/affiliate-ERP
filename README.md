@@ -412,6 +412,12 @@ answers 503 when neither a key nor a pinned product is available).
 
 For Facebook affiliate drafts without automatic posting, set `AFFILIATE_COMMENT_MODE=draft_only` on the app server and restart it. This blocks queue approval (including Telegram) and dispatch to all workers; it does not cancel tasks already in flight. Stop posting workers before switching. Keep worker `RADAR_ENABLED=true` and `WARMING_ENABLED=false`; select the desired consumers per group in `/radar`. Review drafts in `/queue`.
 
+In `/queue`, get the tracked link **before** publishing by hand. Shopee links require the Affiliate API to confirm the Sub_ID. After posting, record the comment permalink and actual time; this does not dispatch a worker. `/analytics` shows sync readiness separately from revenue and ranks referred products by verified net commission (not estimates).
+
+In `/leads`, record qualification, a two-way conversation, and confirmed trial use when they actually happen. Record template, setup, and maintenance receipts only for money received. The 14-day group report uses Vietnam calendar days; a monthly rate is an agreement, not cash. Filter diagnostics count attempts without retaining rejected post text.
+
+`/shop-profit` offers the free calculator and workbook. To deliver the 249,000 VND full version, install the paid `.xlsx` **outside the repository and web root**, readable by the app service. Set `SHOP_PROFIT_FULL_WORKBOOK_PATH` and optionally pin `SHOP_PROFIT_FULL_WORKBOOK_SHA256`; restart the app. In `/leads/fulfillment`, record the customer's consent and download the file for manual delivery. A positive template receipt for that lead is required; changing a CRM status does not unlock the download.
+
 **Try it offline:** `pnpm leads:dry-run` feeds three synthetic Vietnamese posts through the pipeline and prints alerts and persisted rows in a temporary in-memory Postgres database. It requires no `.env.local`, Facebook session, LLM key, Telegram bot or Docker. `pnpm verify:schema` checks the migration and CRM rules locally.
 
 ## Persona warming

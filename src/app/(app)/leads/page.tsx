@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { InboxIcon } from "lucide-react";
+import { InboxIcon, PackageCheckIcon, SparklesIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/patterns/empty-state";
 import { PageHeader } from "@/components/patterns/page-header";
 import { LeadCard } from "@/components/leads/lead-card";
+import { LeadFilterReport } from "@/components/leads/lead-filter-report";
 import { LeadFilters } from "@/components/leads/lead-filters";
+import { LeadGroupReport } from "@/components/leads/lead-group-report";
 import { LeadsPagination } from "@/components/leads/leads-pagination";
 import { Button } from "@/components/ui/button";
-import { listLeads } from "@/lib/data/leads";
+import { listLeadGroupFunnel, listLeads } from "@/lib/data/leads";
 import { buildLeadsHref, hasLeadFilters, parseLeadListState } from "@/lib/leads/url";
 
-export const metadata: Metadata = { title: "Lead Hunter" };
+export const metadata: Metadata = { title: "Lead Hunter & chốt đơn" };
 
 type LeadsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -29,27 +31,48 @@ export default async function LeadsPage({
   const state = parseLeadListState(params);
   const filtered = hasLeadFilters(state);
 
-  const list = await listLeads({
-    status: state.status,
-    minScore: state.minScore,
-    category: state.category,
-    query: state.query,
-    page: state.page
-  });
+  const [list, funnel] = await Promise.all([
+    listLeads({
+      status: state.status,
+      minScore: state.minScore,
+      category: state.category,
+      query: state.query,
+      page: state.page
+    }),
+    listLeadGroupFunnel()
+  ]);
 
   const pastLastPage = list.rows.length === 0 && state.page > 1;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
-        title="Lead Hunter"
-        description="Bài viết trong nhóm Facebook đang có nhu cầu về Excel, Google Sheets, quản lý kho, dòng tiền hoặc automation. Chấm điểm, sao chép phản hồi và theo dõi đến khi chốt."
+        title="Lead Hunter &amp; chốt đơn"
+        description="Bài viết trong nhóm Facebook đang có nhu cầu về Excel, Google Sheets, quản lý kho, dòng tiền hoặc automation. Chấm điểm, ghi mốc chốt thực tế và tiền khách đã trả — không suy ra doanh thu từ trạng thái."
         actions={
-          <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-            <Link href="/radar">Quản lý từ khóa Radar</Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Link href="/shop-profit">
+                <SparklesIcon />
+                Offer miễn phí
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Link href="/leads/fulfillment">
+                <PackageCheckIcon />
+                Vận hành giao hàng
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Link href="/radar">Quản lý từ khóa Radar</Link>
+            </Button>
+          </>
         }
       />
+
+      <LeadFilterReport />
+
+      <LeadGroupReport rows={funnel} />
 
       <LeadFilters state={state} />
 

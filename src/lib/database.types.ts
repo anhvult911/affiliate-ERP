@@ -25,13 +25,16 @@ export type Database = {
           Tables: {
             "affiliate_conversions": {
                   Row: {
+                    validated_commission: number | null
                     "converted_at": string,"created_at": string,"estimated_commission": number,"external_order_id": string | null,"id": string,"order_amount": number,"status": Database["public"]['Enums']["conversion_status"],"sub_id": string,"task_id": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
+                    validated_commission?: number | null
                     "converted_at"?: string,"created_at"?: string,"estimated_commission"?: number,"external_order_id"?: string | null,"id"?: string,"order_amount"?: number,"status"?: Database["public"]['Enums']["conversion_status"],"sub_id": string,"task_id"?: string | null,"updated_at"?: string
                   }
                   Update: {
+                    validated_commission?: number | null
                     "converted_at"?: string,"created_at"?: string,"estimated_commission"?: number,"external_order_id"?: string | null,"id"?: string,"order_amount"?: number,"status"?: Database["public"]['Enums']["conversion_status"],"sub_id"?: string,"task_id"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
@@ -65,14 +68,14 @@ isOneToOne: false
                   ]
                 },"comment_tasks": {
                   Row: {
-                    "ai_draft_comment": string | null,"approved_at": string | null,"assigned_account_id": string | null,"attempt_count": number,"claimed_at": string | null,"claimed_by": string | null,"created_at": string,"executed_at": string | null,"execution_mode": Database["public"]['Enums']["execution_mode"],"execution_note": string | null,"id": string,"last_error": string | null,"match_score": number | null,"matched_product_id": string | null,"post_content": string | null,"post_images": NonNullable<Json>,"post_url": string,"review_note": string | null,"secondary_account_id": string | null,"selected_review_image": string | null,"source_id": string | null,"status": Database["public"]['Enums']["task_status"],"sub_id_code": string | null,"updated_at": string
+                    "ai_draft_comment": string | null,"approved_at": string | null,"assigned_account_id": string | null,"attempt_count": number,"claimed_at": string | null,"claimed_by": string | null,"created_at": string,"executed_at": string | null,"execution_mode": Database["public"]['Enums']["execution_mode"],"execution_note": string | null,"id": string,"last_error": string | null,"manual_post_url": string | null,"manual_published_at": string | null,"manual_published_by": string | null,"match_score": number | null,"matched_product_id": string | null,"post_content": string | null,"post_images": NonNullable<Json>,"post_url": string,"review_note": string | null,"secondary_account_id": string | null,"selected_review_image": string | null,"source_id": string | null,"status": Database["public"]['Enums']["task_status"],"sub_id_code": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "ai_draft_comment"?: string | null,"approved_at"?: string | null,"assigned_account_id"?: string | null,"attempt_count"?: number,"claimed_at"?: string | null,"claimed_by"?: string | null,"created_at"?: string,"executed_at"?: string | null,"execution_mode"?: Database["public"]['Enums']["execution_mode"],"execution_note"?: string | null,"id"?: string,"last_error"?: string | null,"match_score"?: number | null,"matched_product_id"?: string | null,"post_content"?: string | null,"post_images"?: NonNullable<Json>,"post_url": string,"review_note"?: string | null,"secondary_account_id"?: string | null,"selected_review_image"?: string | null,"source_id"?: string | null,"status"?: Database["public"]['Enums']["task_status"],"sub_id_code"?: string | null,"updated_at"?: string
+                    "ai_draft_comment"?: string | null,"approved_at"?: string | null,"assigned_account_id"?: string | null,"attempt_count"?: number,"claimed_at"?: string | null,"claimed_by"?: string | null,"created_at"?: string,"executed_at"?: string | null,"execution_mode"?: Database["public"]['Enums']["execution_mode"],"execution_note"?: string | null,"id"?: string,"last_error"?: string | null,"manual_post_url"?: string | null,"manual_published_at"?: string | null,"manual_published_by"?: string | null,"match_score"?: number | null,"matched_product_id"?: string | null,"post_content"?: string | null,"post_images"?: NonNullable<Json>,"post_url": string,"review_note"?: string | null,"secondary_account_id"?: string | null,"selected_review_image"?: string | null,"source_id"?: string | null,"status"?: Database["public"]['Enums']["task_status"],"sub_id_code"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "ai_draft_comment"?: string | null,"approved_at"?: string | null,"assigned_account_id"?: string | null,"attempt_count"?: number,"claimed_at"?: string | null,"claimed_by"?: string | null,"created_at"?: string,"executed_at"?: string | null,"execution_mode"?: Database["public"]['Enums']["execution_mode"],"execution_note"?: string | null,"id"?: string,"last_error"?: string | null,"match_score"?: number | null,"matched_product_id"?: string | null,"post_content"?: string | null,"post_images"?: NonNullable<Json>,"post_url"?: string,"review_note"?: string | null,"secondary_account_id"?: string | null,"selected_review_image"?: string | null,"source_id"?: string | null,"status"?: Database["public"]['Enums']["task_status"],"sub_id_code"?: string | null,"updated_at"?: string
+                    "ai_draft_comment"?: string | null,"approved_at"?: string | null,"assigned_account_id"?: string | null,"attempt_count"?: number,"claimed_at"?: string | null,"claimed_by"?: string | null,"created_at"?: string,"executed_at"?: string | null,"execution_mode"?: Database["public"]['Enums']["execution_mode"],"execution_note"?: string | null,"id"?: string,"last_error"?: string | null,"manual_post_url"?: string | null,"manual_published_at"?: string | null,"manual_published_by"?: string | null,"match_score"?: number | null,"matched_product_id"?: string | null,"post_content"?: string | null,"post_images"?: NonNullable<Json>,"post_url"?: string,"review_note"?: string | null,"secondary_account_id"?: string | null,"selected_review_image"?: string | null,"source_id"?: string | null,"status"?: Database["public"]['Enums']["task_status"],"sub_id_code"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -142,6 +145,84 @@ isOneToOne: false
       columns: ["group_id","user_id"]
 isOneToOne: false
       referencedRelation: "target_sources"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"lead_milestones": {
+                  Row: {
+                    "created_at": string,"group_id": string | null,"group_name": string,"id": string,"kind": Database["public"]['Enums']["lead_milestone_kind"],"lead_id": string,"note": string | null,"occurred_at": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"group_id"?: string | null,"group_name"?: string,"id"?: string,"kind": Database["public"]['Enums']["lead_milestone_kind"],"lead_id": string,"note"?: string | null,"occurred_at": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"group_id"?: string | null,"group_name"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["lead_milestone_kind"],"lead_id"?: string,"note"?: string | null,"occurred_at"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lead_milestones_group_owner_fkey"
+      columns: ["group_id","user_id"]
+isOneToOne: false
+      referencedRelation: "target_sources"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "lead_milestones_lead_owner_fkey"
+      columns: ["lead_id","user_id"]
+isOneToOne: false
+      referencedRelation: "leads"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"lead_receipts": {
+                  Row: {
+                    "amount_vnd": number,"created_at": string,"group_id": string | null,"group_name": string,"id": string,"idempotency_key": string,"kind": Database["public"]['Enums']["lead_receipt_kind"],"lead_id": string,"note": string | null,"paid_at": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_vnd": number,"created_at"?: string,"group_id"?: string | null,"group_name"?: string,"id"?: string,"idempotency_key": string,"kind": Database["public"]['Enums']["lead_receipt_kind"],"lead_id": string,"note"?: string | null,"paid_at": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "amount_vnd"?: number,"created_at"?: string,"group_id"?: string | null,"group_name"?: string,"id"?: string,"idempotency_key"?: string,"kind"?: Database["public"]['Enums']["lead_receipt_kind"],"lead_id"?: string,"note"?: string | null,"paid_at"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lead_receipts_group_owner_fkey"
+      columns: ["group_id","user_id"]
+isOneToOne: false
+      referencedRelation: "target_sources"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "lead_receipts_lead_owner_fkey"
+      columns: ["lead_id","user_id"]
+isOneToOne: false
+      referencedRelation: "leads"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"lead_recurring_terms": {
+                  Row: {
+                    "created_at": string,"ended_on": string | null,"group_id": string | null,"group_name": string,"id": string,"lead_id": string,"monthly_vnd": number,"note": string | null,"started_on": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"ended_on"?: string | null,"group_id"?: string | null,"group_name"?: string,"id"?: string,"lead_id": string,"monthly_vnd": number,"note"?: string | null,"started_on": string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"ended_on"?: string | null,"group_id"?: string | null,"group_name"?: string,"id"?: string,"lead_id"?: string,"monthly_vnd"?: number,"note"?: string | null,"started_on"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lead_recurring_terms_group_owner_fkey"
+      columns: ["group_id","user_id"]
+isOneToOne: false
+      referencedRelation: "target_sources"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "lead_recurring_terms_lead_owner_fkey"
+      columns: ["lead_id","user_id"]
+isOneToOne: false
+      referencedRelation: "leads"
       referencedColumns: ["id","user_id"]
     }
                   ]
@@ -348,6 +429,14 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"v_lead_group_funnel_14d": {
+                  Row: {
+                    "avg_cash_per_paid_customer": number | null,"cash_maintenance_vnd": number | null,"cash_setup_vnd": number | null,"cash_template_vnd": number | null,"cash_total_vnd": number | null,"group_id": string | null,"group_name": string | null,"paid_customers": number | null,"qualified_leads": number | null,"receipt_count": number | null,"recurring_monthly_vnd": number | null,"trial_confirmed_leads": number | null,"two_way_leads": number | null,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    
+                  ]
                 },"v_task_roi": {
                   Row: {
                     "account_name": string | null,"commission": number | null,"commission_rate": number | null,"created_at": string | null,"executed_at": string | null,"execution_mode": Database["public"]['Enums']["execution_mode"] | null,"orders": number | null,"post_url": string | null,"product_name": string | null,"revenue": number | null,"settled_commission": number | null,"source_name": string | null,"source_type": Database["public"]['Enums']["source_type"] | null,"status": Database["public"]['Enums']["task_status"] | null,"sub_id_code": string | null,"task_id": string | null
@@ -359,6 +448,7 @@ isOneToOne: false
                 }
           }
           Functions: {
+            settled_product_ranking: { Args: { p_since?: string }; Returns: { product_id: string; product_name: string; settled_orders: number; net_commission: number }[] },
             "account_stats":
 { Args: Record<PropertyKey, never>; Returns: {
               "avg_trust": number,"status": Database["public"]['Enums']["account_status"],"total": number
@@ -433,8 +523,13 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"lead_capture_report": { Args: Record<PropertyKey, never>; Returns: { source_id: string; group_name: string; outcome: string; attempts: number }[] },
+"record_lead_capture": { Args: { p_source_id: string; p_outcome: string }; Returns: undefined },
 "default_lead_keywords":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"ensure_task_sub_id":
+{ Args: { "p_task_id": string }; Returns: string
                            },
 "is_operator":
 { Args: Record<PropertyKey, never>; Returns: boolean
@@ -493,6 +588,7 @@ isOneToOne: false
                            }
           }
           Enums: {
+            "account_status": "active"|"cooldown"|"checkpoint","conversion_status": "pending"|"settled"|"canceled","execution_mode": "single"|"seeding_2_accounts","lead_category": "sheets_excel"|"automation"|"other","lead_intent": "buyer_inquiry"|"help_needed"|"seller_promo"|"irrelevant","lead_milestone_kind": "qualified"|"two_way_conversation"|"trial_use_confirmed","lead_receipt_kind": "template"|"setup"|"maintenance","lead_status": "pending_review"|"new"|"replied"|"sent_freebie"|"bought_template"|"upsold_automation"|"ignored","social_platform": "facebook"|"instagram"|"tiktok"|"threads","source_capture_mode": "affiliate"|"leads"|"both","source_type": "group"|"fanpage"|"kol"|"forum","task_status": "pending_approval"|"queued"|"running"|"completed"|"manually_published"|"failed"|"dry_run"|"rejected","warming_kind": "lifestyle_post"|"cross_warm"|"profile_setup","warming_status": "completed"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -612,7 +708,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_status": ["active", "cooldown", "checkpoint"],"conversion_status": ["pending", "settled", "canceled"],"execution_mode": ["single", "seeding_2_accounts"],"social_platform": ["facebook", "instagram", "tiktok", "threads"],"source_type": ["group", "fanpage", "kol", "forum"],"task_status": ["pending_approval", "queued", "running", "completed", "failed", "rejected"],"warming_kind": ["lifestyle_post", "cross_warm", "profile_setup"],"warming_status": ["completed", "failed"]
+            "account_status": ["active", "cooldown", "checkpoint"],"conversion_status": ["pending", "settled", "canceled"],"execution_mode": ["single", "seeding_2_accounts"],"social_platform": ["facebook", "instagram", "tiktok", "threads"],"source_capture_mode": ["affiliate", "leads", "both"],"source_type": ["group", "fanpage", "kol", "forum"],"task_status": ["pending_approval", "queued", "running", "completed", "manually_published", "failed", "dry_run", "rejected"],"warming_kind": ["lifestyle_post", "cross_warm", "profile_setup"],"warming_status": ["completed", "failed"]
           }
         }
 } as const

@@ -43,7 +43,7 @@ export function QueueItemQuickActions({
       }
 
       toast.success(`Đã xếp hàng cho nick ${result.data.accountName}`, {
-        description: `Mã Sub_ID ${result.data.subIdCode} đã được gắn vào link affiliate.`
+        description: `Mã Sub_ID ${result.data.subIdCode} đã được gán. Worker sẽ tạo link tracking khi nhận việc.`
       });
       router.refresh();
     });

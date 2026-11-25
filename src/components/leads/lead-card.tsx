@@ -4,17 +4,19 @@ import type { ReactNode } from "react";
 import { CopyButton } from "@/components/patterns/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { Lead } from "@/lib/data/leads";
-import { formatHostname, formatRelative } from "@/lib/format";
+import type { LeadWithSales } from "@/lib/data/leads";
+import { formatHostname, formatRelative, formatVnd } from "@/lib/format";
 import {
   LEAD_FOLLOWUP_STATUSES,
   isLeadStatus,
   leadCategoryLabel,
   leadIntentLabel
 } from "@/lib/leads/status";
+import { isLeadMilestoneKind, LEAD_MILESTONE_LABEL } from "@/lib/leads/sales";
 
 import { LeadScoreBadge, LeadStatusBadge } from "./lead-badges";
 import { LeadControls } from "./lead-controls";
+import { LeadSalesControls } from "./lead-sales-controls";
 
 function DraftBlock({
   title,
@@ -77,13 +79,17 @@ function RawPost({ content, alwaysVisible }: { content: string | null; alwaysVis
   );
 }
 
-export function LeadCard({ lead }: { lead: Lead }) {
+export function LeadCard({ lead }: { lead: LeadWithSales }) {
   const pending = lead.status === "pending_review";
   const followupDue =
     lead.next_followup_at !== null &&
     isLeadStatus(lead.status) &&
     LEAD_FOLLOWUP_STATUSES.includes(lead.status) &&
     new Date(lead.next_followup_at).getTime() <= Date.now();
+  const receiptTotal = lead.receipts.reduce((sum, receipt) => sum + Number(receipt.amount_vnd), 0);
+  const milestoneKinds = new Set(
+    lead.milestones.filter((row) => isLeadMilestoneKind(row.kind)).map((row) => row.kind)
+  );
 
   return (
     <Card className={pending ? "border-warning/50 bg-warning/5" : undefined}>
@@ -95,6 +101,20 @@ export function LeadCard({ lead }: { lead: Lead }) {
             <Badge variant="outline">{leadCategoryLabel(lead.matched_category)}</Badge>
           ) : null}
           <Badge variant="muted">{leadIntentLabel(lead.intent_type)}</Badge>
+          {milestoneKinds.has("qualified") ? (
+            <Badge variant="info">{LEAD_MILESTONE_LABEL.qualified}</Badge>
+          ) : null}
+          {milestoneKinds.has("two_way_conversation") ? (
+            <Badge variant="warning">{LEAD_MILESTONE_LABEL.two_way_conversation}</Badge>
+          ) : null}
+          {milestoneKinds.has("trial_use_confirmed") ? (
+            <Badge variant="success">{LEAD_MILESTONE_LABEL.trial_use_confirmed}</Badge>
+          ) : null}
+          {lead.receipts.length > 0 ? (
+            <Badge variant="success">
+              Đã trả {formatVnd(receiptTotal)} · {lead.receipts.length} khoản
+            </Badge>
+          ) : null}
           {followupDue ? <Badge variant="warning">Đến hạn nhắc lại</Badge> : null}
           <span className="text-muted-foreground ml-auto text-xs">
             {formatRelative(lead.created_at)}
@@ -159,6 +179,13 @@ export function LeadCard({ lead }: { lead: Lead }) {
           status={lead.status}
           notes={lead.notes}
           nextFollowupAt={lead.next_followup_at}
+        />
+
+        <LeadSalesControls
+          leadId={lead.id}
+          milestones={lead.milestones}
+          receipts={lead.receipts}
+          recurringTerm={lead.recurringTerm}
         />
       </div>
     </Card>

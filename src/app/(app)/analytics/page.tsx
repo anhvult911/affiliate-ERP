@@ -25,6 +25,7 @@ import { AnalyticsRangeNav } from "@/components/analytics/range-nav";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { PageHeader } from "@/components/patterns/page-header";
 import { StatCard } from "@/components/patterns/stat-card";
+import { ShopeeSyncStatusPanel } from "@/components/shopee/shopee-sync-status";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getAccountPerformance,
@@ -33,8 +34,10 @@ import {
   getPerformanceByAccount,
   getPerformanceBySource,
   getRevenueSeries,
+  getSettledProductRanking,
   getTaskRoiRows
 } from "@/lib/data/analytics";
+import { getShopeeSyncStatus } from "@/lib/data/shopee";
 import { formatCompactVnd, formatNumber, formatPercent } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Phân tích & Doanh thu" };
@@ -62,15 +65,18 @@ export default async function AnalyticsPage({
   const params = await searchParams;
   const days = parseDays(params.days);
 
-  const [summary, series, bySource, byAccount, roiRows, accountRows, feed] = await Promise.all([
-    getAnalyticsSummary({ days }),
-    getRevenueSeries({ days }),
-    getPerformanceBySource({ days }),
-    getPerformanceByAccount({ days }),
-    getTaskRoiRows({ days, limit: ATTRIBUTION_LIMIT }),
-    getAccountPerformance(),
-    getConversionFeed({ days, limit: FEED_LIMIT })
-  ]);
+  const [summary, series, bySource, byAccount, roiRows, accountRows, feed, shopeeSync, ranking] =
+    await Promise.all([
+      getAnalyticsSummary({ days }),
+      getRevenueSeries({ days }),
+      getPerformanceBySource({ days }),
+      getPerformanceByAccount({ days }),
+      getTaskRoiRows({ days, limit: ATTRIBUTION_LIMIT }),
+      getAccountPerformance(),
+      getConversionFeed({ days, limit: FEED_LIMIT }),
+      getShopeeSyncStatus(),
+      getSettledProductRanking({ days })
+    ]);
 
   const rangeLabel = days === null ? "Toàn thời gian" : `${days} ngày qua`;
   const description = `${rangeLabel} · Đối soát Sub_ID, doanh thu và hoa hồng affiliate${
@@ -88,6 +94,26 @@ export default async function AnalyticsPage({
         description={description}
         actions={<AnalyticsRangeNav days={days} />}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Trạng thái đồng bộ Shopee</CardTitle>
+          <CardDescription>
+            Nguồn đơn hàng/hoa hồng tự động. &quot;Chưa chạy&quot; hoặc &quot;Quá hạn&quot;
+            nghĩa là bảng doanh thu có thể chưa phản ánh đơn mới, không phải doanh thu bằng 0.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ShopeeSyncStatusPanel status={shopeeSync} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Top sản phẩm theo hoa hồng đã đối soát</CardTitle>
+          <CardDescription>Xếp theo số tiền ròng Shopee xác nhận cho Sub_ID của sản phẩm giới thiệu; không tính ước tính hoặc giá trị đơn hàng.</CardDescription>
+        </CardHeader>
+        <CardContent>{ranking.length ? <ol className="space-y-2">{ranking.map((row, index) => <li key={row.product_id} className="flex justify-between gap-3"><span>{index + 1}. {row.product_name}</span><span className="tabular-nums">{formatNumber(row.net_commission)} đ</span></li>)}</ol> : <p>Chưa có hoa hồng ròng được đối soát và gắn với sản phẩm trong kỳ.</p>}</CardContent>
+      </Card>
 
       {/* KPI grid — 2-up on phones, 4-up from md. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

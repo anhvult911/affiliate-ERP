@@ -5,7 +5,7 @@ import type { Database } from "@/lib/database.types";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/env";
 
 /** Routes that never require a signed-in operator. */
-const PUBLIC_PATHS = ["/login", "/auth", "/setup"];
+const PUBLIC_PATHS = ["/login", "/auth", "/setup", "/shop-profit"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

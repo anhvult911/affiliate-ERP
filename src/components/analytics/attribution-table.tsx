@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import type { TaskRoiRow } from "@/lib/data/analytics";
 import { formatNumber, formatVnd } from "@/lib/format";
+import { buildQueueHref } from "@/lib/queue/url";
 
 /** Sub_ID attribution: one row per task, linked back to the approval queue. */
 export function AttributionTable({ rows }: { rows: TaskRoiRow[] }) {
@@ -35,7 +36,12 @@ export function AttributionTable({ rows }: { rows: TaskRoiRow[] }) {
           </TableHeader>
           <TableBody>
             {rows.map((row, index) => {
-              const href = row.task_id ? `/queue?task=${row.task_id}` : null;
+              const href = row.task_id
+                ? buildQueueHref({
+                    status: row.status ?? "pending_approval",
+                    taskId: row.task_id
+                  })
+                : null;
               return (
                 <TableRow key={row.task_id ?? `roi-${index}`}>
                   <TableCell>
@@ -89,7 +95,12 @@ export function AttributionTable({ rows }: { rows: TaskRoiRow[] }) {
         </Table>
       }
       mobile={rows.map((row, index) => {
-        const href = row.task_id ? `/queue?task=${row.task_id}` : null;
+        const href = row.task_id
+          ? buildQueueHref({
+              status: row.status ?? "pending_approval",
+              taskId: row.task_id
+            })
+          : null;
         return (
           <div
             key={row.task_id ?? `roi-${index}`}

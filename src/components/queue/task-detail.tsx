@@ -3,18 +3,21 @@ import { ArrowLeftIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react
 
 import { CopyButton } from "@/components/patterns/copy-button";
 import { ExecutionModeBadge, TaskStatusBadge } from "@/components/patterns/status-badge";
+import { ManualPublicationPanel } from "@/components/queue/manual-publication-panel";
 import { PostImagesViewer } from "@/components/queue/post-images-viewer";
 import { TaskReviewPanel } from "@/components/queue/task-review-panel";
+import { ShopeeSyncStatusPanel } from "@/components/shopee/shopee-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { SOURCE_TYPE_LABEL } from "@/lib/constants";
+import { SOURCE_TYPE_LABEL, type TaskStatus } from "@/lib/constants";
 import type { QueueAccount, QueueConversionRow, QueueTask } from "@/lib/data/comment-tasks";
+import type { ShopeeSyncStatus } from "@/lib/data/shopee";
 import { formatDateTime, formatHostname, formatMatchScore, formatPercent, formatRelative, formatVnd } from "@/lib/format";
 import { asStringArray } from "@/lib/json";
+import { platformOf } from "@/lib/products/platform";
 import { buildQueueHref } from "@/lib/queue/url";
-import type { TaskStatus } from "@/lib/constants";
 
 function scoreTone(score: number | null) {
   if (score === null) return "muted" as const;
@@ -32,6 +35,8 @@ export function TaskDetail({
   task,
   accounts,
   conversions,
+  shopeeSync,
+  draftOnly,
   status,
   sourceId,
   limit
@@ -39,12 +44,17 @@ export function TaskDetail({
   task: QueueTask;
   accounts: QueueAccount[];
   conversions: QueueConversionRow[];
+  shopeeSync: ShopeeSyncStatus;
+  draftOnly: boolean;
   status: TaskStatus;
   sourceId: string | null;
   limit: number;
 }) {
   const postImages = asStringArray(task.post_images);
   const reviewImages = asStringArray(task.product?.review_images);
+  const isShopeeProduct = task.product
+    ? platformOf(task.product.affiliate_short_link) === "shopee"
+    : false;
   const activeConversions = conversions.filter((row) => row.status !== "canceled");
   const revenue = activeConversions.reduce((total, row) => total + Number(row.order_amount), 0);
   const commission = activeConversions.reduce(
@@ -130,11 +140,15 @@ export function TaskDetail({
             {task.product.pros_cons_summary ? (
               <p className="text-muted-foreground text-sm">{task.product.pros_cons_summary}</p>
             ) : null}
+            <p className="text-muted-foreground text-xs">
+              Link affiliate gốc — chưa gắn Sub_ID. Khi đăng thủ công, dùng khối bên dưới để
+              lấy link tracking đã xác thực.
+            </p>
             <div className="flex items-center gap-2 rounded-md border px-2 py-1">
               <span className="min-w-0 flex-1 truncate font-mono text-xs">
                 {task.product.affiliate_short_link}
               </span>
-              <CopyButton value={task.product.affiliate_short_link} label="Sao chép link affiliate" />
+              <CopyButton value={task.product.affiliate_short_link} label="Sao chép link affiliate gốc" />
               <Button variant="ghost" size="icon-sm" asChild>
                 <a
                   href={task.product.affiliate_short_link}
@@ -147,7 +161,10 @@ export function TaskDetail({
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Mã Sub_ID sẽ được gắn tự động: <span className="font-mono">{task.sub_id_code ?? "(sinh khi duyệt)"}</span>
+              Sub_ID dùng chung cho đăng tự động và đăng thủ công:{" "}
+              <span className="font-mono">
+                {task.sub_id_code ?? "(tạo khi lấy link tracking hoặc duyệt)"}
+              </span>
             </p>
           </CardContent>
         </Card>
@@ -158,7 +175,9 @@ export function TaskDetail({
         <CardHeader>
           <CardTitle className="text-base">Bảng phê duyệt</CardTitle>
           <CardDescription>
-            Chỉnh sửa bản nháp AI, chọn tài khoản đăng, sau đó bấm duyệt để đưa vào hàng đợi worker.
+            {draftOnly
+              ? "Chỉnh sửa bản nháp AI rồi đăng thủ công bằng link tracking bên dưới. Chế độ chỉ soạn nháp không xếp hàng worker."
+              : "Chỉnh sửa bản nháp AI, chọn tài khoản đăng, sau đó bấm duyệt để đưa vào hàng đợi worker."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -173,12 +192,43 @@ export function TaskDetail({
             initialReviewImage={task.selected_review_image}
             accounts={accounts}
             reviewImages={reviewImages}
+            draftOnly={draftOnly}
           />
         </CardContent>
       </Card>
 
+      {/* Manual affiliate workflow — usable without approval, even in draft-only mode. */}
+      {task.status === "pending_approval" ||
+      task.status === "failed" ||
+      task.status === "dry_run" ||
+      task.status === "manually_published" ||
+      task.manual_post_url ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Liên kết tracking &amp; Đăng thủ công</CardTitle>
+            <CardDescription>
+              Sao chép link có Sub_ID, đăng bình luận bằng tay rồi ghi lại đúng permalink và
+              thời điểm. Không có API Facebook hay trình duyệt nào chạy ở bước này.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ManualPublicationPanel
+              taskId={task.id}
+              status={task.status}
+              subIdCode={task.sub_id_code}
+              manualPostUrl={task.manual_post_url}
+              manualPublishedAt={task.manual_published_at}
+              manualPublishedBy={task.manual_published_by}
+              draft={task.ai_draft_comment ?? ""}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Execution record */}
-      {task.status !== "pending_approval" && task.status !== "rejected" ? (
+      {task.status !== "pending_approval" &&
+      task.status !== "rejected" &&
+      task.status !== "manually_published" ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Nhật ký thực thi</CardTitle>
@@ -195,7 +245,9 @@ export function TaskDetail({
                 <dd className="text-xs">{formatDateTime(task.claimed_at)}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground text-xs">Đã đăng</dt>
+                <dt className="text-muted-foreground text-xs">
+                  {task.status === "dry_run" ? "Chạy thử lúc" : "Đã đăng"}
+                </dt>
                 <dd className="text-xs">{formatDateTime(task.executed_at)}</dd>
               </div>
               <div>
@@ -253,6 +305,8 @@ export function TaskDetail({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {isShopeeProduct ? <ShopeeSyncStatusPanel status={shopeeSync} /> : null}
+
           {conversions.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               Chưa có đơn hàng phát sinh. Khi có chuyển đổi từ mã Sub_ID, hệ thống postback sẽ tự động ghi nhận tại đây.

@@ -177,7 +177,7 @@ export function flattenConversionNode(node: unknown): ConversionRow[] {
       orderAmount: asNumber(order.actualAmount) ?? totals.amount,
       // Per-order commission first: using the checkout total for every order would count
       // the same money once per order.
-      estimatedCommission: totals.commission ?? conversionCommission,
+      estimatedCommission: totals.commission ?? (orders.length === 1 ? conversionCommission : null),
       status: conversionStatus(order.orderStatus),
       convertedAt
     });
@@ -197,6 +197,7 @@ export type ValidatedRow = {
   subId: string;
   externalOrderId: string;
   estimatedCommission: number | null;
+  validatedCommission: number | null;
   status: "settled";
   convertedAt: string | null;
 };
@@ -228,7 +229,10 @@ export function flattenValidatedNode(node: unknown): ValidatedRow[] {
     rows.push({
       subId,
       externalOrderId: orderId,
-      estimatedCommission: netCommission ?? totals.commission,
+      // A checkout-level net covering several orders has no authoritative per-order
+      // split. Do not allocate it arbitrarily or multiply it across product rankings.
+      estimatedCommission: orders.length === 1 ? netCommission ?? totals.commission : totals.commission,
+      validatedCommission: orders.length === 1 ? netCommission : null,
       status: "settled",
       convertedAt
     });

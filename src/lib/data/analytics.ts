@@ -79,6 +79,12 @@ function rangeStartIso(days: number | null): string | null {
   return startOfUtcDay.toISOString();
 }
 
+export async function getSettledProductRanking({ days }: AnalyticsRange) {
+  const db = await createSupabaseServerClient();
+  const { data, error } = await db.rpc("settled_product_ranking", { p_since: rangeStartIso(days) ?? undefined });
+  return requireRows("settled product ranking", data, error?.message);
+}
+
 /** PostgREST serialises numeric/bigint columns as JSON numbers; coerce defensively. */
 function num(value: number | string | null | undefined): number {
   const parsed = Number(value);

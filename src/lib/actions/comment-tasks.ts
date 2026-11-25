@@ -2,36 +2,55 @@
 
 import { revalidatePath } from "next/cache";
 
-import { WORKER_LEASE_MINUTES } from "@/lib/constants";
+import { TASK_STATUS_LABEL, WORKER_LEASE_MINUTES } from "@/lib/constants";
 import { resolveDb, type SupabaseDb } from "@/lib/db";
+import { platformOf } from "@/lib/products/platform";
 import { pickDefaultAccount } from "@/lib/queue/assignment";
 import { affiliateDraftOnly } from "@/lib/queue/publication";
-import { fail, fromZodError, ok, type ActionResult } from "@/lib/result";
+import { errorMessage, fail, fromZodError, ok, type ActionResult } from "@/lib/result";
+import { ShopeeClient } from "@/lib/shopee/client";
+import { isShopeeConfigured, readShopeeConfig } from "@/lib/shopee/config";
+import { originUrlFor, requestShortLink } from "@/lib/shopee/short-link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { buildTrackedAffiliateUrl } from "@/lib/worker/affiliate";
 import {
   approveTaskSchema,
+  manualPublicationSchema,
   rejectTaskSchema,
   taskIdSchema,
   updateDraftSchema,
   type ApproveTaskInput,
+  type ManualPublicationInput,
   type RejectTaskInput
 } from "@/lib/validations/comment-task";
-
-/** No look-alike characters: the Sub_ID is read back by the network postback. */
-const SUB_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function generateSubIdCode() {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-
-  return `T-${Array.from(bytes, (byte) => SUB_ID_ALPHABET.charAt(byte % SUB_ID_ALPHABET.length)).join("")}`;
-}
 
 /** Statuses an approve action may move to `queued`. `failed` = retry after a worker error. */
 const APPROVABLE_STATUSES = ["pending_approval", "failed"];
 
+/** A manual publication is only meaningful before any real automated post exists. */
+const MANUAL_RECORDABLE_STATUSES = ["pending_approval", "failed", "dry_run"] as const;
+
+export type TrackedAffiliateLink = {
+  link: string;
+  subIdCode: string;
+  platform: "shopee" | "other";
+  /** `shopee_api` = Shopee minted the link with the Sub_ID; never a query-string claim. */
+  verification: "shopee_api" | "query_param";
+};
+
 function revalidateQueue() {
   revalidatePath("/queue");
+}
+
+/** Case/query-preserving enough to catch a pasted duplicate of the source post. */
+function normalizedUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value.trim();
+  }
 }
 
 /**
@@ -56,7 +75,7 @@ export async function approveTask(
 
   const { data: task, error: taskError } = await supabase
     .from("comment_tasks")
-    .select("id,status,sub_id_code,matched_product_id,product:products(id,affiliate_short_link)")
+    .select("id,status,matched_product_id,product:products(id,affiliate_short_link)")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -103,20 +122,13 @@ export async function approveTask(
     }
   }
 
-  // Reuse an existing code so a retry keeps the same attribution link.
-  let subIdCode = task.sub_id_code;
+  // Atomically mint (or reuse) the attribution code. The RPC locks the task row,
+  // so a retry and a manual-link copy cannot produce two codes for one post.
+  const { data: subIdCode, error: subIdError } = await supabase.rpc("ensure_task_sub_id", {
+    p_task_id: taskId
+  });
 
-  for (let attempt = 0; !subIdCode && attempt < 3; attempt += 1) {
-    const candidate = generateSubIdCode();
-    const { data: clash } = await supabase
-      .from("comment_tasks")
-      .select("id")
-      .eq("sub_id_code", candidate)
-      .maybeSingle();
-
-    if (!clash) subIdCode = candidate;
-  }
-
+  if (subIdError) return fail(`Không thể tạo mã Sub_ID: ${subIdError.message}`);
   if (!subIdCode) return fail("Không thể tạo mã Sub_ID duy nhất — vui lòng thử lại.");
 
   // Optimistic guard on status: two devices approving the same card must not
@@ -307,4 +319,213 @@ export async function updateTaskDraft(taskId: string, draft: string): Promise<Ac
   revalidateQueue();
 
   return ok();
+}
+
+/**
+ * Returns the exact tracked URL an operator should paste when publishing by hand.
+ *
+ * This is deliberately independent of approval: it only mints/reuses the Sub_ID, it
+ * never queues the task or calls Facebook. For Shopee the link must come from Shopee's
+ * `generateShortLink` mutation (docs/SHOPEE_API.md §4.2); the query-string append is
+ * not verified for API-produced links, so a missing credential or API failure is an
+ * explicit unavailable state instead of a link that merely looks tracked.
+ */
+export async function getTaskTrackedLink(
+  taskId: string
+): Promise<ActionResult<TrackedAffiliateLink>> {
+  const parsed = taskIdSchema.safeParse({ taskId });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const supabase = await createSupabaseServerClient();
+  const { data: task, error } = await supabase
+    .from("comment_tasks")
+    .select("id,matched_product_id,product:products(id,affiliate_short_link,origin_link)")
+    .eq("id", parsed.data.taskId)
+    .maybeSingle()
+    .overrideTypes<
+      | {
+          id: string;
+          matched_product_id: string | null;
+          product: {
+            id: string;
+            affiliate_short_link: string | null;
+            origin_link: string | null;
+          } | null;
+        }
+      | null,
+      { merge: false }
+    >();
+
+  if (error) return fail(error.message);
+  if (!task) return fail("Tác vụ này không còn tồn tại trên hệ thống.");
+  if (!task.matched_product_id || !task.product?.affiliate_short_link) {
+    return fail(
+      "Tác vụ chưa được ghép với sản phẩm có link affiliate — không thể tạo link tracking. Vui lòng ghép sản phẩm trước."
+    );
+  }
+
+  const { data: subIdCode, error: subIdError } = await supabase.rpc("ensure_task_sub_id", {
+    p_task_id: parsed.data.taskId
+  });
+  if (subIdError) return fail(`Không thể tạo mã Sub_ID: ${subIdError.message}`);
+  if (!subIdCode) return fail("Không thể tạo mã Sub_ID duy nhất — vui lòng thử lại.");
+
+  const platform = platformOf(task.product.affiliate_short_link);
+
+  // Non-Shopee networks use the documented query parameter, so appending is the
+  // supported tracking mechanism (not an unverified fallback).
+  if (platform !== "shopee") {
+    return ok({
+      link: buildTrackedAffiliateUrl(task.product.affiliate_short_link, subIdCode),
+      subIdCode,
+      platform: "other",
+      verification: "query_param"
+    });
+  }
+
+  if (!isShopeeConfigured()) {
+    return fail(
+      "Shopee Affiliate API chưa được cấu hình (thiếu SHOPEE_AFFILIATE_APP_ID và/hoặc SHOPEE_AFFILIATE_APP_SECRET). " +
+        "Không thể tạo link tracking Shopee đã xác thực. Nhờ quản trị viên cấu hình credential trên máy chủ rồi bấm thử lại — " +
+        "không tự nối Sub_ID vào link Shopee vì cách đó chưa được xác nhận."
+    );
+  }
+
+  const originUrl = originUrlFor(task.product);
+  if (!originUrl) {
+    return fail(
+      "Sản phẩm chưa có link gốc Shopee hợp lệ để tạo link tracking. Cập nhật link gốc cho sản phẩm rồi thử lại."
+    );
+  }
+
+  try {
+    const link = await requestShortLink(new ShopeeClient(readShopeeConfig()), {
+      originUrl,
+      subId: subIdCode
+    });
+
+    return ok({
+      link,
+      subIdCode,
+      platform: "shopee",
+      verification: "shopee_api"
+    });
+  } catch (err) {
+    return fail(
+      `Shopee chưa xác nhận được link tracking: ${errorMessage(err)}. ` +
+        "Không dùng link tự nối Sub_ID cho Shopee — vui lòng thử lại hoặc kiểm tra cấu hình/API access."
+    );
+  }
+}
+
+/**
+ * Records that the operator published this comment by hand.
+ *
+ * This is not an automated execution: it never sets `executed_at` or `completed`, and
+ * it never touches Facebook. The task moves to its own `manually_published` state, so
+ * the worker cannot claim it later and the approval action cannot requeue it. The
+ * permalink and time are exactly what the operator supplied; conversions keep
+ * reconciling through the same `sub_id_code`.
+ */
+export async function recordManualPublication(
+  input: ManualPublicationInput
+): Promise<ActionResult<{ subIdCode: string; permalink: string; publishedAt: string }>> {
+  const parsed = manualPublicationSchema.safeParse(input);
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const published = new Date(parsed.data.publishedAt);
+  if (published.getTime() > Date.now() + 5 * 60_000) {
+    return fail("Thời điểm đăng không được ở tương lai.");
+  }
+  if (published.getTime() < Date.UTC(2000, 0, 1)) {
+    return fail("Thời điểm đăng không hợp lệ.");
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: task, error: taskError } = await supabase
+    .from("comment_tasks")
+    .select("id,status,post_url,matched_product_id,product:products(id,affiliate_short_link)")
+    .eq("id", parsed.data.taskId)
+    .maybeSingle()
+    .overrideTypes<
+      | {
+          id: string;
+          status: string;
+          post_url: string;
+          matched_product_id: string | null;
+          product: { id: string; affiliate_short_link: string | null } | null;
+        }
+      | null,
+      { merge: false }
+    >();
+
+  if (taskError) return fail(taskError.message);
+  if (!task) return fail("Tác vụ này không còn tồn tại trên hệ thống.");
+
+  if (task.status === "manually_published") {
+    return fail("Bài này đã được ghi nhận đăng thủ công — không tạo thêm bản ghi trùng.");
+  }
+  if (!MANUAL_RECORDABLE_STATUSES.some(status => status === task.status)) {
+    return fail(
+      `Chỉ tác vụ đang chờ duyệt, thất bại hoặc chạy thử mới có thể ghi nhận đăng thủ công. Tác vụ này đang ở trạng thái "${
+        TASK_STATUS_LABEL[task.status as keyof typeof TASK_STATUS_LABEL] ?? task.status
+      }".`
+    );
+  }
+  if (!task.matched_product_id || !task.product?.affiliate_short_link) {
+    return fail(
+      "Tác vụ chưa được ghép với sản phẩm có link affiliate — bài đăng thủ công sẽ không thể đối soát hoa hồng."
+    );
+  }
+  if (normalizedUrl(parsed.data.permalink) === normalizedUrl(task.post_url)) {
+    return fail(
+      "Permalink đang trùng link bài gốc, chưa phải link bình luận đã đăng. Hãy mở bình luận của bạn và sao chép permalink riêng của nó."
+    );
+  }
+
+  // Mint before the state change so the recorded post and the link the operator
+  // copied always carry the same code.
+  const { data: subIdCode, error: subIdError } = await supabase.rpc("ensure_task_sub_id", {
+    p_task_id: parsed.data.taskId
+  });
+  if (subIdError) return fail(`Không thể tạo mã Sub_ID: ${subIdError.message}`);
+  if (!subIdCode) return fail("Không thể tạo mã Sub_ID duy nhất — vui lòng thử lại.");
+
+  const { data: authData } = await supabase.auth.getUser();
+  const actor = authData.user?.email ?? authData.user?.id ?? null;
+
+  // Status guard: a stale tab that approved or manually recorded the task first must
+  // lose here, so it cannot overwrite a worker claim or a completed post.
+  const { data: updated, error: updateError } = await supabase
+    .from("comment_tasks")
+    .update({
+      status: "manually_published",
+      manual_post_url: parsed.data.permalink,
+      manual_published_at: published.toISOString(),
+      manual_published_by: actor,
+      // claimed_at/claimed_by/last_error/executed_at are intentionally preserved:
+      // a failed attempt remains auditable, and `manually_published` already keeps the
+      // worker from claiming or requeueing this row.
+    })
+    .eq("id", parsed.data.taskId)
+    .in("status", MANUAL_RECORDABLE_STATUSES)
+    .is("manual_published_at", null)
+    .select("id,sub_id_code")
+    .maybeSingle();
+
+  if (updateError) return fail(updateError.message);
+  if (!updated) {
+    return fail(
+      "Tác vụ vừa được thiết bị khác xử lý (đã xếp hàng, đang chạy hoặc đã ghi nhận) — vui lòng tải lại trang."
+    );
+  }
+
+  revalidateQueue();
+
+  return ok({
+    subIdCode: updated.sub_id_code ?? subIdCode,
+    permalink: parsed.data.permalink,
+    publishedAt: published.toISOString()
+  });
 }

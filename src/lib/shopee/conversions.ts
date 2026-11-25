@@ -26,6 +26,8 @@ export type ConversionInput = {
   externalOrderId: string;
   orderAmount?: number | null;
   estimatedCommission?: number | null;
+  /** Only supplied by validatedReport. Never overwrite it with an estimated callback. */
+  validatedCommission?: number | null;
   status: ConversionStatus;
   convertedAt?: string | null;
 };
@@ -75,6 +77,7 @@ export async function applyConversion(
   input: ConversionInput
 ): Promise<ConversionWriteResult> {
   const warnings: string[] = [];
+  const verified = input.validatedCommission == null ? {} : { validated_commission: input.validatedCommission };
 
   const { data: existing, error: existingError } = await db
     .from("affiliate_conversions")
@@ -98,6 +101,7 @@ export async function applyConversion(
     const { data: updated, error: updateError } = await db
       .from("affiliate_conversions")
       .update({
+        ...verified,
         status: nextConversionStatus(existing.status, input.status),
         order_amount: mergeAmount(existing.order_amount, input.orderAmount),
         estimated_commission: mergeAmount(existing.estimated_commission, input.estimatedCommission),
@@ -132,6 +136,7 @@ export async function applyConversion(
   const { data: inserted, error: insertError } = await db
     .from("affiliate_conversions")
     .insert({
+      ...verified,
       task_id: task?.id ?? null,
       sub_id: input.subId,
       external_order_id: input.externalOrderId,

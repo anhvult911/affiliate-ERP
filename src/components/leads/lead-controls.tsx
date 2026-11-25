@@ -17,23 +17,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateLead } from "@/lib/actions/leads";
+import { fromDateTimeLocal, toDateTimeLocal } from "@/lib/leads/datetime";
 import { LEAD_STATUSES, leadStatusLabel } from "@/lib/leads/status";
 import { formatDateTime } from "@/lib/format";
-
-/** `datetime-local` wants local wall-clock time, not the UTC ISO string. */
-function toDateTimeLocal(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromDateTimeLocal(value: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
 
 export function LeadControls({
   leadId,

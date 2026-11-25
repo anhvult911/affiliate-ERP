@@ -44,13 +44,16 @@ export function QueueList({
   status,
   sourceId,
   limit,
-  selectedId
+  selectedId,
+  draftOnly
 }: {
   tasks: QueueTask[];
   status: TaskStatus;
   sourceId: string | null;
   limit: QueueLimit;
   selectedId: string | null;
+  /** Draft-only hides the one-tap approve so the card cannot promise a dispatch. */
+  draftOnly: boolean;
 }) {
   if (tasks.length === 0) {
     return (
@@ -67,7 +70,7 @@ export function QueueList({
     );
   }
 
-  const actionable = status === "pending_approval" || status === "failed";
+  const actionable = (status === "pending_approval" || status === "failed") && !draftOnly;
 
   return (
     <>

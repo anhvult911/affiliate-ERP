@@ -4,9 +4,11 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2Icon,
+  LockIcon,
   SaveIcon,
   SendIcon,
   ThumbsDownIcon,
+  TriangleAlertIcon,
   Undo2Icon,
   WandSparklesIcon,
   ZoomInIcon
@@ -71,7 +73,8 @@ export function TaskReviewPanel({
   initialSecondaryId,
   initialReviewImage,
   accounts,
-  reviewImages
+  reviewImages,
+  draftOnly
 }: {
   taskId: string;
   status: TaskStatus;
@@ -83,6 +86,8 @@ export function TaskReviewPanel({
   initialReviewImage: string | null;
   accounts: AssignableAccount[];
   reviewImages: string[];
+  /** True when AFFILIATE_COMMENT_MODE forbids automated approval/dispatch. */
+  draftOnly: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -111,7 +116,8 @@ export function TaskReviewPanel({
     setClaimIsStale(Date.now() - new Date(claimedAt).getTime() >= WORKER_LEASE_MINUTES * 60_000);
   }, [status, claimedAt]);
 
-  const canReturnToApproval = status === "queued" || status === "failed" || claimIsStale;
+  const canReturnToApproval =
+    status === "queued" || status === "failed" || (status === "running" && claimIsStale);
   const selectedAccount = accounts.find((account) => account.id === accountId) ?? null;
   const accountWarning =
     selectedAccount && selectedAccount.status !== "active"
@@ -164,6 +170,10 @@ export function TaskReviewPanel({
   }
 
   function approve() {
+    if (draftOnly) {
+      toast.error("Chế độ chỉ soạn nháp đang bật — hãy dùng khối Đăng thủ công.");
+      return;
+    }
     if (!accountId) {
       toast.error("Pick the account that will post the comment.");
       return;
@@ -185,7 +195,7 @@ export function TaskReviewPanel({
       }
 
       toast.success("Task queued for execution", {
-        description: `Sub_ID ${result.data.subIdCode} is appended to the affiliate link.`
+        description: `Sub_ID ${result.data.subIdCode} đã được gán cho tác vụ. Worker sẽ tạo link tracking khi nhận việc.`
       });
       router.refresh();
     });
@@ -221,6 +231,20 @@ export function TaskReviewPanel({
     <div className="space-y-4">
       {reviewable ? (
         <>
+          {draftOnly ? (
+            <div className="border-warning/40 bg-warning/5 flex items-start gap-2 rounded-md border p-3 text-xs">
+              <TriangleAlertIcon className="text-warning mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="font-medium">Chế độ chỉ soạn nháp đang bật.</span> Hệ thống
+                không xếp hàng và không tự đăng bình luận. Hãy dùng khối{" "}
+                <a href="#manual-publication" className="underline">
+                  Liên kết tracking &amp; đăng thủ công
+                </a>{" "}
+                bên dưới để sao chép link và ghi nhận permalink thật.
+              </span>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="draft">Bản nháp bình luận AI</Label>
@@ -422,14 +446,25 @@ export function TaskReviewPanel({
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
-              variant="success"
+              variant={draftOnly ? "outline" : "success"}
               size="block"
               className="sm:flex-1"
               onClick={approve}
-              disabled={pending}
+              disabled={pending || draftOnly}
+              title={
+                draftOnly
+                  ? "Chế độ chỉ soạn nháp: không thể xếp hàng đăng tự động."
+                  : undefined
+              }
             >
-              {pending ? <Loader2Icon className="animate-spin" /> : <SendIcon />}
-              Duyệt &amp; Chạy
+              {draftOnly ? (
+                <LockIcon />
+              ) : pending ? (
+                <Loader2Icon className="animate-spin" />
+              ) : (
+                <SendIcon />
+              )}
+              {draftOnly ? "Đăng tự động đang tắt" : "Duyệt & Chạy"}
             </Button>
             <Button
               variant="outline"
@@ -456,6 +491,16 @@ export function TaskReviewPanel({
               {pending ? <Loader2Icon className="animate-spin" /> : <Undo2Icon />}
               Chuyển về chờ duyệt
             </Button>
+          ) : status === "manually_published" ? (
+            <p className="text-muted-foreground text-xs">
+              Bài này đã được ghi nhận đăng thủ công. Worker không thể nhận lại và tác vụ
+              không thể quay về hàng đợi — hoa hồng vẫn được đối soát qua Sub_ID.
+            </p>
+          ) : status === "dry_run" ? (
+            <p className="text-muted-foreground text-xs">
+              Lần chạy thử này chưa gửi bình luận nào. Bạn có thể đăng thủ công bằng khối
+              bên dưới; thời điểm chạy thử vẫn được giữ lại để đối chiếu.
+            </p>
           ) : (
             <p className="text-muted-foreground text-xs">
               Một worker đã nhận nhiệm vụ này và có thể đang tiến hành bình luận. Có thể chuyển về chờ duyệt sau {WORKER_LEASE_MINUTES} phút nếu tác vụ bị kẹt.
@@ -479,16 +524,30 @@ export function TaskReviewPanel({
               <ThumbsDownIcon className="text-destructive size-5" />
               <span className="sr-only sm:not-sr-only sm:text-xs">Từ chối</span>
             </Button>
-            <Button
-              variant="success"
-              size="lg"
-              className="min-h-12 flex-1 text-sm font-semibold shadow-md active:scale-[0.99]"
-              onClick={approve}
-              disabled={pending}
-            >
-              {pending ? <Loader2Icon className="animate-spin" /> : <SendIcon />}
-              Duyệt &amp; Chạy
-            </Button>
+            {draftOnly ? (
+              <Button
+                variant="success"
+                size="lg"
+                className="min-h-12 flex-1 text-sm font-semibold shadow-md active:scale-[0.99]"
+                asChild
+              >
+                <a href="#manual-publication">
+                  <SendIcon />
+                  Đăng thủ công
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="success"
+                size="lg"
+                className="min-h-12 flex-1 text-sm font-semibold shadow-md active:scale-[0.99]"
+                onClick={approve}
+                disabled={pending}
+              >
+                {pending ? <Loader2Icon className="animate-spin" /> : <SendIcon />}
+                Duyệt &amp; Chạy
+              </Button>
+            )}
           </div>
         ) : canReturnToApproval ? (
           <Button

@@ -81,13 +81,7 @@ export async function generateShortLink(
   if (platformOf(originUrl) !== "shopee") return null;
 
   try {
-    const data = await client.query<{ generateShortLink?: { shortLink?: unknown } }>(
-      SHORT_LINK_MUTATION,
-      { originUrl, subIds: [subId] }
-    );
-
-    const shortLink = data.generateShortLink?.shortLink;
-    return isUsableShortLink(shortLink) ? shortLink.trim() : null;
+    return await requestShortLink(client, { originUrl, subId });
   } catch (error) {
     console.warn(
       "[shopee] generateShortLink failed, keeping the query-string link:",
@@ -95,6 +89,39 @@ export async function generateShortLink(
     );
     return null;
   }
+}
+
+/**
+ * Strict variant used when the operator explicitly asks for a tracked link.
+ *
+ * The worker path is best-effort and may silently fall back; a manual publication
+ * cannot, because the operator is about to post that exact URL. Here a missing or
+ * malformed link from Shopee is an error the UI must surface, never a query-string
+ * link presented as "verified".
+ */
+export async function requestShortLink(
+  client: ShopeeClient,
+  input: { originUrl: string; subId: string }
+): Promise<string> {
+  const originUrl = input.originUrl.trim();
+  const subId = input.subId.trim();
+  if (!originUrl || !subId) throw new Error("Missing origin URL or Sub_ID.");
+
+  if (platformOf(originUrl) !== "shopee") {
+    throw new Error("The origin URL is not a Shopee link.");
+  }
+
+  const data = await client.query<{ generateShortLink?: { shortLink?: unknown } }>(
+    SHORT_LINK_MUTATION,
+    { originUrl, subIds: [subId] }
+  );
+
+  const shortLink = data.generateShortLink?.shortLink;
+  if (!isUsableShortLink(shortLink)) {
+    throw new Error("Shopee did not return a usable short link.");
+  }
+
+  return shortLink.trim();
 }
 
 /** Applies the API link when it exists, otherwise leaves the tracked URL untouched. */

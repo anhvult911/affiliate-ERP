@@ -29,6 +29,7 @@ export const TASK_STATUSES = [
   "queued",
   "running",
   "completed",
+  "manually_published",
   "failed",
   "dry_run",
   "rejected"
@@ -78,6 +79,7 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   queued: "Đã xếp hàng",
   running: "Đang chạy",
   completed: "Hoàn thành",
+  manually_published: "Đã đăng thủ công",
   failed: "Thất bại",
   dry_run: "Chạy thử (chưa đăng)",
   rejected: "Đã từ chối"
@@ -112,6 +114,7 @@ export const TASK_STATUS_TONE: Record<
   queued: "info",
   running: "info",
   completed: "success",
+  manually_published: "success",
   failed: "destructive",
   dry_run: "info",
   rejected: "muted"

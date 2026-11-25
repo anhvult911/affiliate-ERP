@@ -153,6 +153,12 @@ test("validated rows are settled and carry the net commission", () => {
   assert.equal(rows[0]?.status, "settled");
   assert.equal(rows[0]?.externalOrderId, "done-1");
   assert.equal(rows[0]?.estimatedCommission, 18_500);
+  assert.equal(rows[0]?.validatedCommission, 18_500);
+});
+
+test("a checkout-level net is not attributed to each order in a multi-order checkout", () => {
+  const rows = flattenValidatedNode({ netCommission: "10000", orders: [{orderId:"one"}, {orderId:"two"}] });
+  assert.deepEqual(rows.map(row => row.validatedCommission), [null, null]);
 });
 
 test("unix seconds become ISO; junk becomes null", () => {
